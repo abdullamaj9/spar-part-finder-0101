@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كارلي — اطلب قطع غيار سيارتك</title>
+<style>
+  :root {
+    --navy: #0F2A4A; --navy-2: #1B3D63; --accent: #1D9E75;
+    --bg: #F5F6F8; --card: #FFFFFF; --line: #E2E6EC;
+    --text: #11243B; --muted: #6B7A8D; --danger: #C0392B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Tahoma, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    padding: 16px; max-width: 640px; margin: 0 auto;
+  }
+  header { text-align: center; padding: 20px 0 12px; }
+  header h1 { color: var(--navy); font-size: 26px; font-weight: 700; }
+  header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  input, select, textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+    border-radius: 9px; font-size: 15px; font-family: inherit; background: #FBFCFD;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { margin-bottom: 12px; }
+  .item-block {
+    border: 1px dashed var(--line); border-radius: 11px;
+    padding: 14px; margin-bottom: 10px; position: relative; background: #FAFBFC;
+  }
+  .item-block .remove {
+    position: absolute; top: 10px; left: 10px; background: none; border: none;
+    color: var(--danger); cursor: pointer; font-size: 18px; width: auto; padding: 0;
+  }
+  .btn {
+    background: var(--navy); color: #fff; border: none; border-radius: 10px;
+    padding: 13px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%;
+    font-family: inherit; transition: background .2s;
+  }
+  .btn:hover { background: var(--navy-2); }
+  .btn-ghost { background: #EEF2F6; color: var(--navy); }
+  .btn-ghost:hover { background: #E2E8EF; }
+  .preview { max-width: 80px; max-height: 80px; border-radius: 8px; margin-top: 8px; display: none; }
+  .hidden { display: none; }
+  /* العداد */
+  .countdown-wrap { text-align: center; padding: 30px 0; }
+  .countdown {
+    font-size: 64px; font-weight: 800; color: var(--navy);
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown small { display: block; font-size: 15px; color: var(--muted); font-weight: 500; }
+  .tip { color: var(--muted); font-size: 14px; margin-top: 16px; }
+  /* النتائج */
+  .item-result { margin-bottom: 18px; }
+  .item-result h3 { color: var(--navy); font-size: 16px; margin-bottom: 8px; }
+  .offer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px;
+  }
+  .offer.best { border-color: var(--accent); border-width: 2px; background: #F0FAF6; }
+  .offer .price { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .offer .meta { font-size: 12px; color: var(--muted); }
+  .offer button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-weight: 600; cursor: pointer; width: auto; font-family: inherit;
+  }
+  .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>كارلي لقطع الغيار</h1>
+  <p>أرسل طلبك، نجمع لك أفضل الأسعار خلال 90 ثانية — مجانًا</p>
+</header>
+
+<!-- مرحلة 1: النموذج -->
+<div id="formStage">
+  <div class="card">
+    <div class="field">
+      <label>رقمك على واتساب</label>
+      <input id="whatsapp" type="tel" placeholder="مثال: 0501234567" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="isWorkshop" style="width:auto;display:inline"> أنا ورشة / تاجر</label>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>الشركة</label>
+        <select id="brand"><option value="">اختر...</option></select>
+      </div>
+      <div class="field">
+        <label>الموديل</label>
+        <select id="model"><option value="">اختر الشركة أولًا</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>سنة الصنع</label>
+        <input id="year" type="number" placeholder="2020" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>رقم الشاصي (اختياري)</label>
+        <input id="vin" type="text" placeholder="VIN">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label style="font-size:15px;color:var(--navy);margin-bottom:12px">القطع المطلوبة</label>
+    <div id="itemsContainer"></div>
+    <button class="btn btn-ghost" onclick="addItem()" style="margin-top:6px">+ إضافة قطعة أخرى</button>
+  </div>
+
+  <button class="btn" onclick="submitRequest()">إرسال الطلب وبدء البحث</button>
+</div>
+
+<!-- مرحلة 2: العداد -->
+<div id="countdownStage" class="hidden">
+  <div class="card countdown-wrap">
+    <div class="countdown"><span id="counter">90</span><small>ثانية — نجمع العروض من الموردين</small></div>
+    <p class="tip" id="tip">جارٍ إرسال طلبك لأفضل الموردين المتخصصين...</p>
+  </div>
+</div>
+
+<!-- مرحلة 3: النتائج -->
+<div id="resultsStage" class="hidden">
+  <div class="card">
+    <h2 style="color:var(--navy);font-size:18px;margin-bottom:4px">أفضل العروض</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">اختر الطريقة التي تناسبك</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-ghost" id="modeBasket" onclick="setMode('basket',this)" style="flex:1">مورد واحد للكل</button>
+      <button class="btn btn-ghost" id="modeItem" onclick="setMode('item',this)" style="flex:1">أرخص لكل قطعة</button>
+    </div>
+    <div id="basketView"></div>
+    <div id="itemView" class="hidden"></div>
+    <button class="btn hidden" id="confirmBtn" onclick="confirmChoice()" style="margin-top:14px">تأكيد الاختيار</button>
+  </div>
+</div>
+
+<script>
+let META = { brands: [], brandModels: {}, conditions: [], countdown: 90 };
+let currentItemIds = [];
+
+async function loadMeta() {
+  const res = await fetch('/api/meta');
+  META = await res.json();
+  const bsel = document.getElementById('brand');
+  META.brands.forEach(b => {
+    const o = document.createElement('option'); o.value = b; o.textContent = b; bsel.appendChild(o);
+  });
+  addItem();
+}
+
+document.getElementById('brand').addEventListener('change', function() {
+  const msel = document.getElementById('model');
+  msel.innerHTML = '<option value="">اختر...</option>';
+  (META.brandModels[this.value] || []).forEach(m => {
+    const o = document.createElement('option'); o.value = m; o.textContent = m; msel.appendChild(o);
+  });
+});
+
+let itemCounter = 0;
+function addItem() {
+  itemCounter++;
+  const id = itemCounter;
+  const div = document.createElement('div');
+  div.className = 'item-block';
+  div.id = 'item-' + id;
+  const condOptions = META.conditions.map(c => `<option value="${c}">${c}</option>`).join('');
+  div.innerHTML = `
+    ${id > 1 ? `<button class="remove" onclick="document.getElementById('item-${id}').remove()">✕</button>` : ''}
+    <div class="field">
+      <label>اسم القطعة</label>
+      <input type="text" class="part-name" placeholder="مثال: مساعدات أمامية">
+    </div>
+    <div class="field">
+      <label>النوع</label>
+      <select class="part-condition">${condOptions}</select>
+    </div>
+    <div class="field">
+      <label>صورة القطعة (اختياري)</label>
+      <input type="file" class="part-image" accept="image/*" onchange="previewImg(this)">
+      <img class="preview">
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+}
+
+function previewImg(input) {
+  const img = input.parentElement.querySelector('.preview');
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; img.dataset.b64 = e.target.result; };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+async function submitRequest() {
+  const whatsapp = document.getElementById('whatsapp').value.trim();
+  const brand = document.getElementById('brand').value;
+  if (!whatsapp || !brand) { alert('أدخل رقمك واختر الشركة'); return; }
+
+  const items = [];
+  document.querySelectorAll('.item-block').forEach(b => {
+    const name = b.querySelector('.part-name').value.trim();
+    if (!name) return;
+    const img = b.querySelector('.preview');
+    items.push({
+      part_name: name,
+      part_condition: b.querySelector('.part-condition').value,
+      image_url: img.dataset.b64 || '',
+    });
+  });
+  if (!items.length) { alert('أضف قطعة واحدة على الأقل'); return; }
+
+  const payload = {
+    whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
+    brand, model: document.getElementById('model').value,
+    year: parseInt(document.getElementById('year').value, 10) || null,
+    vin: document.getElementById('vin').value.trim(), items,
+  };
+
+  const res = await fetch('/api/requests', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  currentItemIds = data.itemIds;
+  currentRequestId = data.requestId;
+  startCountdown();
+}
+
+function startCountdown() {
+  document.getElementById('formStage').classList.add('hidden');
+  document.getElementById('countdownStage').classList.remove('hidden');
+  let n = META.countdown || 90;
+  const tips = ['نتواصل مع الموردين المتخصصين...', 'نقارن الأسعار تلقائيًا...', 'نختار لك الأفضل...'];
+  const counter = document.getElementById('counter');
+  const tip = document.getElementById('tip');
+  counter.textContent = n;
+  const iv = setInterval(() => {
+    n--; counter.textContent = n;
+    if (n % 30 === 0) tip.textContent = tips[Math.floor(Math.random() * tips.length)];
+    if (n <= 0) { clearInterval(iv); showResults(); }
+  }, 1000);
+}
+
+let currentRequestId = null;
+let basketData = null;
+let itemOffers = {};   // itemId -> offers[]
+let selectedMode = 'basket';
+let basketChoice = null;       // supplier_id المختار في وضع السلة
+let itemChoices = {};          // itemId -> offer_id في وضع التوزيع
+
+async function showResults() {
+  document.getElementById('countdownStage').classList.add('hidden');
+  document.getElementById('resultsStage').classList.remove('hidden');
+
+  // جلب السلال (تغطية كل مورد) + عروض كل قطعة
+  basketData = await (await fetch('/api/requests/' + currentRequestId + '/supplier-baskets')).json();
+  for (const itemId of currentItemIds) {
+    itemOffers[itemId] = await (await fetch('/api/items/' + itemId + '/offers')).json();
+  }
+  setMode('basket', document.getElementById('modeBasket'));
+}
+
+function setMode(mode, btn) {
+  selectedMode = mode;
+  document.getElementById('modeBasket').classList.toggle('btn', mode!=='basket');
+  document.getElementById('modeItem').classList.toggle('btn', mode!=='item');
+  document.getElementById('basketView').classList.toggle('hidden', mode!=='basket');
+  document.getElementById('itemView').classList.toggle('hidden', mode!=='item');
+  document.getElementById('confirmBtn').classList.remove('hidden');
+  if (mode === 'basket') renderBaskets(); else renderItems();
+}
+
+function renderBaskets() {
+  const v = document.getElementById('basketView');
+  if (!basketData.baskets.length) { v.innerHTML = '<p class="muted">لم تصل عروض بعد.</p>'; return; }
+  v.innerHTML = basketData.baskets.map(b => `
+    <div class="offer ${basketChoice===b.supplier_id?'best':''}" onclick="pickBasket(${b.supplier_id})" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="price">${b.sum} درهم</div>
+        ${basketChoice===b.supplier_id?'<span class="badge">مختار</span>':''}
+      </div>
+      <div class="meta">يغطي ${b.covered} من ${b.total_items} قطعة · تقييم ${b.rating||'—'}</div>
+    </div>`).join('');
+}
+
+function pickBasket(sid) { basketChoice = sid; renderBaskets(); }
+
+function renderItems() {
+  const v = document.getElementById('itemView');
+  let html = '';
+  currentItemIds.forEach((itemId, idx) => {
+    const offers = itemOffers[itemId] || [];
+    html += `<div class="item-result"><h3>القطعة ${idx+1}</h3>`;
+    if (!offers.length) html += '<p class="muted" style="font-size:14px">لا عروض</p>';
+    else offers.forEach((o,i) => {
+      html += `<div class="offer ${itemChoices[itemId]===o.id?'best':''}" onclick="pickItem(${itemId},${o.id})" style="cursor:pointer">
+        <div><div class="price">${o.price} درهم ${i===0?'<span class="badge">الأرخص</span>':''}</div>
+        <div class="meta">رد ${o.reply_seconds}ث · تقييم ${o.avg_rating||'—'}</div></div>
+        ${itemChoices[itemId]===o.id?'<span class="badge">مختار</span>':''}</div>`;
+    });
+    html += '</div>';
+  });
+  v.innerHTML = html;
+}
+
+function pickItem(itemId, offerId) { itemChoices[itemId] = offerId; renderItems(); }
+
+async function confirmChoice() {
+  let choices = [];
+  if (selectedMode === 'basket') {
+    if (!basketChoice) { alert('اختر موردًا'); return; }
+    // كل قطع المورد المختار من عروضه
+    for (const itemId of currentItemIds) {
+      const o = (itemOffers[itemId]||[]).find(of => of.supplier_id === basketChoice);
+      if (o) choices.push({ item_id: itemId, offer_id: o.id });
+    }
+  } else {
+    choices = Object.entries(itemChoices).map(([item_id, offer_id]) => ({ item_id: +item_id, offer_id }));
+    if (!choices.length) { alert('اختر عرضًا واحدًا على الأقل'); return; }
+  }
+  const res = await fetch('/api/requests/choose', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ choices }),
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  const names = data.winners.map(w => `${w.name} (${w.items_won} قطعة)`).join('، ');
+  document.getElementById('resultsStage').innerHTML =
+    `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد طلبك ✓</h2>
+     <p style="margin-top:10px">سيتواصل معك: ${names}</p>
+     <p class="muted" style="margin-top:8px">ستصلك بياناتهم عبر الواتساب</p></div>`;
+}
+
+loadMeta();
+</script>
+</body>
+</html>

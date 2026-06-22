@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كارلي — لوحة التحكم</title>
+<style>
+  :root {
+    --navy: #0F2A4A; --navy-2: #1B3D63; --accent: #1D9E75;
+    --bg: #F5F6F8; --card: #FFFFFF; --line: #E2E6EC;
+    --text: #11243B; --muted: #6B7A8D; --danger: #C0392B; --warn: #BA7517;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .login-wrap { max-width: 380px; margin: 80px auto; padding: 0 16px; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  header { background: var(--navy); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 20px; font-weight: 700; }
+  .tabs { display: flex; gap: 6px; padding: 12px 16px 0; max-width: 1000px; margin: 0 auto; flex-wrap: wrap; }
+  .tab { padding: 9px 16px; border: 1px solid var(--line); border-bottom: none; border-radius: 9px 9px 0 0; background: #EEF2F6; cursor: pointer; font-weight: 600; font-size: 14px; }
+  .tab.active { background: var(--card); color: var(--navy); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; font-weight: 600; }
+  input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #FBFCFD; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { margin-bottom: 11px; }
+  .btn { background: var(--navy); color: #fff; border: none; border-radius: 9px; padding: 11px 18px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn:hover { background: var(--navy-2); }
+  .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 7px; }
+  .btn-danger { background: var(--danger); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: 12px; font-weight: 600; }
+  .pill { display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 6px; font-weight: 600; }
+  .pill.active { background: #E1F5EE; color: #0F6E56; }
+  .pill.reserve { background: #FAEEDA; color: #854F0B; }
+  .pill.inactive { background: #F1EFE8; color: #5F5E5A; }
+  .hidden { display: none; }
+  .sat-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .sat-bar .name { width: 90px; font-size: 13px; }
+  .sat-track { flex: 1; height: 18px; background: #EEF2F6; border-radius: 5px; overflow: hidden; }
+  .sat-fill { height: 100%; background: var(--accent); }
+  .sat-fill.full { background: var(--warn); }
+  .muted { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login-wrap">
+  <div class="card">
+    <h2 style="color:var(--navy);margin-bottom:14px">دخول لوحة التحكم</h2>
+    <div class="field"><label>كلمة المرور</label><input id="pwd" type="password" onkeydown="if(event.key==='Enter')login()"></div>
+    <button class="btn" style="width:100%" onclick="login()">دخول</button>
+    <p id="loginErr" class="muted" style="color:var(--danger);margin-top:8px"></p>
+  </div>
+</div>
+
+<div id="appView" class="hidden">
+  <header><h1>كارلي — لوحة التحكم</h1><button class="btn btn-sm" onclick="logout()">خروج</button></header>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('suppliers',this)">الموردون</div>
+    <div class="tab" onclick="showTab('add',this)">إضافة مورد</div>
+    <div class="tab" onclick="showTab('saturation',this)">تشبّع الماركات</div>
+    <div class="tab" onclick="showTab('reports',this)">التقارير</div>
+    <div class="tab" onclick="showTab('backup',this)">النسخ الاحتياطي</div>
+    <div class="tab" onclick="showTab('settings',this)">الإعدادات</div>
+  </div>
+  <div class="container">
+
+    <div id="tab-suppliers">
+      <div class="card">
+        <table>
+          <thead><tr><th>الاسم</th><th>واتساب</th><th>الماركات</th><th>الأنواع</th><th>الحالة</th><th>فاز</th><th>الرصيد</th><th>Score</th><th></th></tr></thead>
+          <tbody id="supBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-add" class="hidden">
+      <div class="card">
+        <div class="field"><label>اسم المورد</label><input id="s-name"></div>
+        <div class="field"><label>رقم الواتساب (دولي: 9715...)</label><input id="s-wa"></div>
+        <div class="field"><label>الماركات التي يغطيها المورد (اختر بالنقر)</label><div id="s-brands"></div></div>
+        <div class="field"><label>الأنواع التي يبيعها</label><div id="s-conds"></div></div>
+        <div class="field"><label>الحالة</label>
+          <select id="s-status"><option value="active">نشط</option><option value="reserve">احتياط</option><option value="inactive">خامل</option></select>
+        </div>
+        <button class="btn" onclick="addSupplier()">إضافة المورد</button>
+        <p id="addMsg" class="muted" style="margin-top:8px"></p>
+      </div>
+    </div>
+
+    <div id="tab-saturation" class="hidden">
+      <div class="card">
+        <p class="muted" style="margin-bottom:14px">عدد الموردين النشطين لكل ماركة مقابل الحد الأقصى. الأصفر = ممتلئ.</p>
+        <div id="satBody"></div>
+      </div>
+    </div>
+
+    <div id="tab-reports" class="hidden">
+      <div class="card">
+        <div class="row" style="grid-template-columns:1fr 1fr auto auto;align-items:end;gap:8px">
+          <div class="field" style="margin:0"><label>من تاريخ</label><input id="rep-from" type="date"></div>
+          <div class="field" style="margin:0"><label>إلى تاريخ</label><input id="rep-to" type="date"></div>
+          <button class="btn btn-sm" onclick="loadReports()">عرض</button>
+        </div>
+      </div>
+      <div id="reportsBody"></div>
+    </div>
+
+    <div id="tab-backup" class="hidden">
+      <div class="card">
+        <p class="muted" style="margin-bottom:14px">نسخة فورية تُحفظ وتُرسل لإيميلك. النسخ التلقائية تعمل حسب الفترة المحددة في الإعدادات.</p>
+        <button class="btn" onclick="runBackup()">إنشاء نسخة احتياطية الآن</button>
+        <a id="dlBackup" class="btn btn-ghost" style="display:inline-block;margin-right:8px;text-decoration:none;text-align:center" onclick="downloadBackup(event)">تنزيل قاعدة البيانات</a>
+        <p id="backupMsg" class="muted" style="margin-top:10px"></p>
+      </div>
+    </div>
+
+    <div id="tab-settings" class="hidden">
+      <div class="card" id="settingsForm"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let TOKEN = null;
+let META = {};
+
+async function login() {
+  const pwd = document.getElementById('pwd').value;
+  const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password:pwd}) });
+  const data = await res.json();
+  if (data.token) {
+    TOKEN = data.token;
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('appView').classList.remove('hidden');
+    init();
+  } else {
+    document.getElementById('loginErr').textContent = 'كلمة المرور خاطئة';
+  }
+}
+function logout() { TOKEN = null; location.reload(); }
+
+function authFetch(path, opts={}) {
+  opts.headers = Object.assign({'Content-Type':'application/json','Authorization':'Bearer '+TOKEN}, opts.headers||{});
+  return fetch(path, opts);
+}
+
+async function init() {
+  META = await (await fetch('/api/meta')).json();
+  const condDiv = document.getElementById('s-conds');
+  condDiv.innerHTML = META.conditions.map(c =>
+    `<label style="font-weight:400;display:inline-block;margin-left:14px"><input type="checkbox" value="${c}" style="width:auto;display:inline" class="cond-cb"> ${c}</label>`
+  ).join('');
+  // مربعات الماركات منظّمة حسب المنشأ
+  const brandsDiv = document.getElementById('s-brands');
+  brandsDiv.innerHTML = Object.entries(META.brandsByOrigin).map(([origin, brands]) => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px">${origin}</div>
+      ${brands.map(b => `<label style="font-weight:400;display:inline-block;margin-left:12px;margin-bottom:4px"><input type="checkbox" value="${b}" style="width:auto;display:inline" class="brand-cb"> ${b}</label>`).join('')}
+    </div>`).join('');
+  loadSuppliers();
+}
+
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['suppliers','add','saturation','reports','backup','settings'].forEach(t =>
+    document.getElementById('tab-'+t).classList.toggle('hidden', t !== name));
+  if (name === 'saturation') loadSaturation();
+  if (name === 'settings') loadSettings();
+  if (name === 'reports') loadReports();
+}
+
+function repQuery() {
+  const f = document.getElementById('rep-from').value, t = document.getElementById('rep-to').value;
+  const p = []; if (f) p.push('from='+f); if (t) p.push('to='+t);
+  return p.length ? '?'+p.join('&') : '';
+}
+
+async function loadReports() {
+  const q = repQuery();
+  const types = [['brands','أكثر الماركات طلبًا'],['parts','أكثر القطع طلبًا'],['conditions','توزيع نوع القطعة'],['customers','أنشط العملاء'],['suppliers','أداء الموردين'],['funnel','قمع التحويل'],['revenue','الإيرادات']];
+  const body = document.getElementById('reportsBody');
+  body.innerHTML = '';
+  for (const [type, title] of types) {
+    const data = await (await authFetch('/api/admin/reports/'+type+q)).json();
+    const card = document.createElement('div'); card.className = 'card';
+    let inner = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="color:var(--navy);font-size:15px">${title}</h3>`;
+    if (Array.isArray(data)) inner += `<button class="btn btn-sm btn-ghost" onclick="exportCSV('${type}')">CSV</button>`;
+    inner += '</div>';
+    if (type === 'funnel') {
+      inner += `<p class="muted">القطع: ${data.total_items} · تلقّت عروضًا: ${data.with_offers} · اختارها العميل: ${data.chosen}</p>`;
+    } else if (type === 'revenue') {
+      inner += `<p>إجمالي: ${data.total.revenue} درهم من ${data.total.leads} طلب فائز</p>`;
+    } else if (Array.isArray(data) && data.length) {
+      const cols = Object.keys(data[0]);
+      inner += '<table><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+        data.slice(0,15).map(r=>'<tr>'+cols.map(c=>`<td>${r[c]??''}</td>`).join('')+'</tr>').join('') + '</tbody></table>';
+    } else inner += '<p class="muted">لا بيانات</p>';
+    card.innerHTML = inner;
+    body.appendChild(card);
+  }
+}
+
+function exportCSV(type) {
+  const q = repQuery(); const sep = q ? '&' : '?';
+  // التنزيل مع التوكن: نفتح عبر fetch ثم blob
+  authFetch('/api/admin/reports/'+type+q+sep+'format=csv').then(r=>r.blob()).then(b=>{
+    const url = URL.createObjectURL(b); const a = document.createElement('a');
+    a.href = url; a.download = type+'.csv'; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
+async function runBackup() {
+  document.getElementById('backupMsg').textContent = 'جارٍ إنشاء النسخة...';
+  const data = await (await authFetch('/api/admin/backup/run', {method:'POST', body:'{}'})).json();
+  const em = data.email && data.email.mock ? ' (الإيميل في وضع الاختبار)' : (data.email && data.email.ok ? ' وأُرسلت لإيميلك' : '');
+  document.getElementById('backupMsg').textContent = `تمت النسخة: ${data.file} (${Math.round(data.size/1024)}KB)${em}`;
+}
+
+function downloadBackup(e) {
+  e.preventDefault();
+  authFetch('/api/admin/backup/download').then(r=>r.blob()).then(b=>{
+    const url = URL.createObjectURL(b); const a = document.createElement('a');
+    a.href = url; a.download = 'carly-backup.db'; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
+async function loadSuppliers() {
+  const list = await (await authFetch('/api/admin/suppliers')).json();
+  document.getElementById('supBody').innerHTML = list.map(s => `
+    <tr>
+      <td>${s.name}</td><td>${s.whatsapp}</td><td>${s.brands}</td><td>${s.conditions}</td>
+      <td><span class="pill ${s.status}">${ {active:'نشط',reserve:'احتياط',inactive:'خامل'}[s.status] }</span></td>
+      <td>${s.won_count}</td><td>${s.balance}</td><td>${s.score}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="delSupplier(${s.id})">حذف</button></td>
+    </tr>`).join('') || '<tr><td colspan="9" class="muted">لا موردون بعد</td></tr>';
+}
+
+async function addSupplier() {
+  const conditions = [...document.querySelectorAll('.cond-cb:checked')].map(c=>c.value).join(',');
+  const brands = [...document.querySelectorAll('.brand-cb:checked')].map(c=>c.value).join(',');
+  const body = {
+    name: document.getElementById('s-name').value.trim(),
+    whatsapp: document.getElementById('s-wa').value.trim(),
+    brands,
+    conditions, status: document.getElementById('s-status').value,
+  };
+  if (!body.name || !body.whatsapp) { document.getElementById('addMsg').textContent='أدخل الاسم والرقم'; return; }
+  if (!brands) { document.getElementById('addMsg').textContent='اختر ماركة واحدة على الأقل'; return; }
+  const res = await authFetch('/api/admin/suppliers', { method:'POST', body: JSON.stringify(body) });
+  const data = await res.json();
+  if (data.error) { document.getElementById('addMsg').textContent = data.error; return; }
+  document.getElementById('addMsg').textContent = 'أُضيف بنجاح. المنشأ المستنتج: ' + data.origins;
+  document.getElementById('s-name').value=''; document.getElementById('s-wa').value='';
+  document.querySelectorAll('.cond-cb:checked, .brand-cb:checked').forEach(c=>c.checked=false);
+  loadSuppliers();
+}
+
+async function delSupplier(id) {
+  if (!confirm('حذف هذا المورد؟')) return;
+  await authFetch('/api/admin/suppliers/'+id, { method:'DELETE' });
+  loadSuppliers();
+}
+
+async function loadSaturation() {
+  const data = await (await authFetch('/api/admin/brand-saturation')).json();
+  const entries = Object.entries(data.counts).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('satBody').innerHTML = entries.map(([brand,count]) => {
+    const pct = Math.min(100, Math.round(count/data.max*100));
+    const full = count >= data.max;
+    return `<div class="sat-bar"><span class="name">${brand}</span>
+      <div class="sat-track"><div class="sat-fill ${full?'full':''}" style="width:${pct}%"></div></div>
+      <span class="muted">${count}/${data.max}</span></div>`;
+  }).join('') || '<p class="muted">لا موردون نشطون بعد</p>';
+}
+
+async function loadSettings() {
+  const s = await (await authFetch('/api/admin/settings')).json();
+  const labels = {
+    free_leads:'عدد الطلبات المجانية لكل مورد', lead_fee:'رسوم الـ Lead (درهم)',
+    debt_cap:'سقف الدين (درهم)', launch_free_active:'الإطلاق المجاني فعّال (1/0)',
+    max_suppliers_per_brand:'حد الموردين لكل ماركة', countdown_seconds:'مدة العداد (ثانية)',
+    score_weight_rating:'وزن التقييم', score_weight_completion:'وزن الالتزام', score_weight_speed:'وزن السرعة',
+  };
+  const form = document.getElementById('settingsForm');
+  form.innerHTML = Object.keys(labels).map(k =>
+    `<div class="field"><label>${labels[k]}</label><input id="set-${k}" value="${s[k]??''}"></div>`
+  ).join('') + '<button class="btn" onclick="saveSettings()">حفظ الإعدادات</button><p id="setMsg" class="muted" style="margin-top:8px"></p>';
+  form._keys = Object.keys(labels);
+}
+
+async function saveSettings() {
+  const form = document.getElementById('settingsForm');
+  const body = {};
+  form._keys.forEach(k => body[k] = document.getElementById('set-'+k).value);
+  await authFetch('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
+  document.getElementById('setMsg').textContent = 'حُفظت الإعدادات';
+}
+</script>
+</body>
+</html>

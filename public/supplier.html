@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كارلي — لوحة المورد</title>
+<style>
+  :root { --navy:#0F2A4A; --navy-2:#1B3D63; --accent:#1D9E75; --bg:#F5F6F8; --card:#FFF; --line:#E2E6EC; --text:#11243B; --muted:#6B7A8D; --danger:#C0392B; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"Segoe UI",Tahoma,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; padding:16px; max-width:560px; margin:0 auto; }
+  header { text-align:center; padding:20px 0; }
+  header h1 { color:var(--navy); font-size:24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+  input { width:100%; padding:12px; border:1px solid var(--line); border-radius:9px; font-size:16px; font-family:inherit; background:#FBFCFD; text-align:center; letter-spacing:2px; }
+  .btn { background:var(--navy); color:#fff; border:none; border-radius:10px; padding:13px; font-size:16px; font-weight:600; cursor:pointer; width:100%; font-family:inherit; margin-top:10px; }
+  .btn:hover { background:var(--navy-2); }
+  .hidden { display:none; }
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; text-align:center; }
+  .stat .num { font-size:26px; font-weight:700; color:var(--navy); }
+  .stat .num.debt { color:var(--danger); }
+  .stat .lbl { font-size:12px; color:var(--muted); margin-top:2px; }
+  .deal { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--line); }
+  .deal:last-child { border-bottom:none; }
+  .deal .info { font-size:14px; }
+  .deal .info small { color:var(--muted); display:block; font-size:12px; }
+  .deal .amt { font-weight:700; color:var(--navy); }
+  .deal .amt.free { color:var(--accent); font-size:13px; }
+  .msg { font-size:13px; color:var(--muted); margin-top:8px; text-align:center; }
+  .msg.err { color:var(--danger); }
+</style>
+</head>
+<body>
+<header><h1>لوحة المورد</h1></header>
+
+<!-- دخول: الرقم -->
+<div id="phoneStage" class="card">
+  <div><label>رقمك على الواتساب المسجّل</label><input id="phone" type="tel" placeholder="9715xxxxxxxx" style="letter-spacing:normal;text-align:right"></div>
+  <button class="btn" onclick="requestOtp()">إرسال رمز الدخول</button>
+  <p id="phoneMsg" class="msg"></p>
+</div>
+
+<!-- دخول: الرمز -->
+<div id="otpStage" class="card hidden">
+  <div><label>أدخل الرمز المُرسَل على واتساب</label><input id="otp" type="text" inputmode="numeric" maxlength="6" placeholder="------"></div>
+  <button class="btn" onclick="verifyOtp()">دخول</button>
+  <p id="otpMsg" class="msg"></p>
+</div>
+
+<!-- اللوحة -->
+<div id="dashStage" class="hidden">
+  <div class="stat-grid">
+    <div class="stat"><div class="num" id="balanceNum">—</div><div class="lbl" id="balanceLbl">الرصيد</div></div>
+    <div class="stat"><div class="num" id="wonNum">—</div><div class="lbl">صفقة رابحة</div></div>
+    <div class="stat"><div class="num" id="freeNum">—</div><div class="lbl">طلب مجاني متبقٍ</div></div>
+    <div class="stat"><div class="num" id="ratingNum">—</div><div class="lbl">التقييم</div></div>
+  </div>
+  <div class="card">
+    <h2 style="color:var(--navy);font-size:16px;margin-bottom:10px">سجل صفقاتك الرابحة</h2>
+    <div id="dealsList"></div>
+  </div>
+</div>
+
+<script>
+let phone = '';
+let token = null;
+
+async function requestOtp() {
+  phone = document.getElementById('phone').value.trim();
+  if (!phone) { return; }
+  const res = await fetch('/api/supplier/request-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ whatsapp: phone }) });
+  const data = await res.json();
+  const msg = document.getElementById('phoneMsg');
+  if (data.error) { msg.textContent = data.error; msg.className = 'msg err'; return; }
+  document.getElementById('phoneStage').classList.add('hidden');
+  document.getElementById('otpStage').classList.remove('hidden');
+}
+
+async function verifyOtp() {
+  const code = document.getElementById('otp').value.trim();
+  const res = await fetch('/api/supplier/verify-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ whatsapp: phone, code }) });
+  const data = await res.json();
+  const msg = document.getElementById('otpMsg');
+  if (data.error) { msg.textContent = data.error; msg.className = 'msg err'; return; }
+  token = data.token;
+  document.getElementById('otpStage').classList.add('hidden');
+  document.getElementById('dashStage').classList.remove('hidden');
+  loadDashboard();
+}
+
+async function loadDashboard() {
+  const res = await fetch('/api/supplier/dashboard', { headers:{'Authorization':'Bearer '+token} });
+  const d = await res.json();
+  const bal = document.getElementById('balanceNum');
+  bal.textContent = d.balance + ' د';
+  bal.className = d.is_debt ? 'num debt' : 'num';
+  document.getElementById('balanceLbl').textContent = d.is_debt ? 'دين مستحق' : 'الرصيد';
+  document.getElementById('wonNum').textContent = d.won_count;
+  document.getElementById('freeNum').textContent = d.free_remaining;
+  document.getElementById('ratingNum').textContent = d.avg_rating ? d.avg_rating.toFixed(1) : '—';
+
+  document.getElementById('dealsList').innerHTML = d.deals.length ? d.deals.map(deal => `
+    <div class="deal">
+      <div class="info">${deal.brand} ${deal.model} ${deal.year||''}
+        <small>${deal.items_count} قطعة · ${new Date(deal.created_at).toLocaleDateString('ar')}</small></div>
+      <div class="amt ${deal.charged>0?'':'free'}">${deal.charged>0? deal.charged+' د' : 'مجاني'}</div>
+    </div>`).join('') : '<p class="msg">لا صفقات بعد</p>';
+}
+</script>
+</body>
+</html>
