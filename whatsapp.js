@@ -1,0 +1,72 @@
+// طبقة إرسال واتساب مجرّدة
+// تدعم: WhatsApp Business API الرسمي (عبر مزوّد) + وضع محاكاة للاختبار المحلي
+// تربط مفاتيحك عبر متغيرات البيئة دون تغيير أي منطق
+
+const PROVIDER = process.env.WA_PROVIDER || 'mock'; // mock | meta
+const META_TOKEN = process.env.WA_META_TOKEN || '';
+const META_PHONE_ID = process.env.WA_META_PHONE_ID || '';
+
+async function sendText(toWhatsapp, text) {
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: ${text.slice(0, 60)}...`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        type: 'text',
+        text: { body: text },
+      }),
+    });
+    return await res.json();
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
+// رسالة طلب للمورد مع أزرار تفاعلية (عربي + إنجليزي معًا)
+// تُرسل عبر Meta interactive buttons عند تفعيل API الرسمي
+function buildSupplierMessage({ requestId, itemId, brand, model, year, partName, condition }) {
+  return `📌 طلب جديد / New Request #${requestId}-${itemId}\n\n` +
+    `السيارة / Car: ${brand} ${model} ${year || ''}\n` +
+    `القطعة / Part: ${partName}\n` +
+    `النوع / Type: ${condition}\n\n` +
+    `هل القطعة متوفرة؟ / Is it available?`;
+}
+
+// بنية الأزرار التفاعلية (Meta interactive format)
+function buildSupplierButtons({ requestId, itemId, brand, model, year, partName, condition }) {
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: buildSupplierMessage({ requestId, itemId, brand, model, year, partName, condition }) },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: `avail_${itemId}`, title: 'متوفر / Available' } },
+          { type: 'reply', reply: { id: `unavail_${itemId}`, title: 'غير متوفر / Not avail.' } },
+        ],
+      },
+    },
+  };
+}
+
+// رسالة طلب السعر بعد ضغط "متوفر"
+function buildPriceRequest() {
+  return 'ممتاز! أرسل السعر بالدرهم (رقم فقط)\nGreat! Send the price in AED (number only)';
+}
+
+// رسالة إشعار الفوز (عربي + إنجليزي)
+function buildWinnerNotice({ brand, model, itemsCount, charged, balance }) {
+  const fee = charged > 0 ? `خُصم ${charged} درهم / ${charged} AED charged` : 'مجاني / Free';
+  return `✅ فزت بصفقة! / You won a deal!\n\n` +
+    `${brand} ${model} — ${itemsCount} قطعة / parts\n${fee}\n` +
+    `رصيدك / Balance: ${balance} درهم\n\n` +
+    `للتفاصيل / Details: [رابط لوحتك]`;
+}
+
+module.exports = { sendText, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };

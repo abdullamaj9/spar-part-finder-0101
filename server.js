@@ -1,0 +1,265 @@
+// الخادم الرئيسي
+const express = require('express');
+const path = require('node:path');
+const crypto = require('node:crypto');
+
+const { db, getSetting, setSetting } = require('./db');
+const suppliersLib = require('./suppliers');
+const requestsLib = require('./requests');
+const { sendText, buildSupplierMessage } = require('./whatsapp');
+const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
+
+const app = express();
+app.use(express.json({ limit: '8mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// كلمة مرور الإدارة من متغير بيئة (لا في الكود)
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'carly2025';
+const tokens = new Set();
+
+function makeToken() {
+  const t = crypto.randomBytes(24).toString('hex');
+  tokens.add(t);
+  return t;
+}
+
+function requireAdmin(req, res, next) {
+  const t = (req.headers.authorization || '').replace('Bearer ', '');
+  if (tokens.has(t)) return next();
+  return res.status(401).json({ error: 'غير مصرّح' });
+}
+
+// ===== المصادقة =====
+app.post('/api/admin/login', (req, res) => {
+  if (req.body.password === ADMIN_PASSWORD) {
+    return res.json({ token: makeToken() });
+  }
+  res.status(401).json({ error: 'كلمة المرور خاطئة' });
+});
+
+// ===== بيانات مرجعية =====
+app.get('/api/meta', (req, res) => {
+  // الماركات مجمّعة حسب المنشأ (لمربعات الاختيار في الكنترول)
+  const byOrigin = {};
+  for (const [brand, info] of Object.entries(BRANDS)) {
+    if (!byOrigin[info.origin]) byOrigin[info.origin] = [];
+    byOrigin[info.origin].push(brand);
+  }
+  res.json({
+    brands: Object.keys(BRANDS),
+    brandModels: Object.fromEntries(Object.entries(BRANDS).map(([k, v]) => [k, v.models])),
+    brandsByOrigin: byOrigin,
+    origins: ORIGINS,
+    conditions: CONDITIONS,
+    countdown: parseInt(getSetting('countdown_seconds'), 10),
+  });
+});
+
+// ===== الموردون (إدارة) =====
+app.get('/api/admin/suppliers', requireAdmin, (req, res) => {
+  res.json(suppliersLib.listSuppliers(req.query.status ? { status: req.query.status } : {}));
+});
+
+app.post('/api/admin/suppliers', requireAdmin, (req, res) => {
+  try {
+    const s = suppliersLib.addSupplier(req.body);
+    res.json(s);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.put('/api/admin/suppliers/:id', requireAdmin, (req, res) => {
+  const s = suppliersLib.updateSupplier(parseInt(req.params.id, 10), req.body);
+  if (!s) return res.status(404).json({ error: 'غير موجود' });
+  res.json(s);
+});
+
+app.delete('/api/admin/suppliers/:id', requireAdmin, (req, res) => {
+  suppliersLib.deleteSupplier(parseInt(req.params.id, 10));
+  res.json({ ok: true });
+});
+
+// مؤشر تشبّع الماركات
+app.get('/api/admin/brand-saturation', requireAdmin, (req, res) => {
+  const active = suppliersLib.listSuppliers({ status: 'active' });
+  const count = {};
+  for (const s of active) {
+    for (const b of suppliersLib.csvClean(s.brands)) count[b] = (count[b] || 0) + 1;
+  }
+  const max = parseInt(getSetting('max_suppliers_per_brand'), 10);
+  res.json({ counts: count, max });
+});
+
+// ===== الإعدادات =====
+app.get('/api/admin/settings', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT key, value FROM settings').all();
+  res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
+});
+
+app.put('/api/admin/settings', requireAdmin, (req, res) => {
+  for (const [k, v] of Object.entries(req.body)) setSetting(k, v);
+  res.json({ ok: true });
+});
+
+// ===== الطلبات (العميل) =====
+app.post('/api/requests', async (req, res) => {
+  try {
+    const { whatsapp, name, is_workshop, brand, model, year, vin, items } = req.body;
+    if (!items || !items.length) return res.status(400).json({ error: 'لا توجد قطع' });
+
+    // إنشاء/جلب العميل
+    let cust = db.prepare('SELECT * FROM customers WHERE whatsapp = ?').get(whatsapp);
+    if (!cust) {
+      const info = db.prepare('INSERT INTO customers (whatsapp, name, is_workshop) VALUES (?, ?, ?)')
+        .run(whatsapp, name || '', is_workshop ? 1 : 0);
+      cust = { id: info.lastInsertRowid };
+    }
+
+    const { requestId, itemIds } = requestsLib.createRequest({
+      customer_id: cust.id, brand, model, year, vin, items,
+    });
+
+    // البث للموردين المؤهلين
+    const targets = requestsLib.broadcastTargets(requestId);
+    let sent = 0;
+    for (const t of targets) {
+      for (const sup of t.suppliers) {
+        const msg = buildSupplierMessage({
+          requestId, itemId: t.item.id, brand, model, year,
+          partName: t.item.part_name, condition: t.item.part_condition,
+        });
+        await sendText(sup.whatsapp, msg);
+        sent++;
+      }
+    }
+
+    res.json({ requestId, itemIds, suppliers_notified: sent });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// عروض قطعة (للعرض على العميل)
+app.get('/api/items/:id/offers', (req, res) => {
+  res.json(requestsLib.offersForItem(parseInt(req.params.id, 10)));
+});
+
+// العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
+// body: { choices: [{ item_id, offer_id }, ...] }
+app.post('/api/requests/choose', (req, res) => {
+  const r = requestsLib.chooseWinners(req.body.choices || []);
+  if (r.error) return res.status(400).json(r);
+  res.json(r);
+});
+
+// عرض ملخص "السلة لكل مورد": كم قطعة يغطي كل مورد ومجموع أسعاره
+app.get('/api/requests/:id/supplier-baskets', (req, res) => {
+  res.json(requestsLib.supplierBaskets(parseInt(req.params.id, 10)));
+});
+
+// ===== لوحة المورد (OTP + جلسة) =====
+const portal = require('./supplier_portal');
+
+app.post('/api/supplier/request-otp', async (req, res) => {
+  const r = await portal.requestOtp((req.body.whatsapp || '').trim());
+  if (r.error) return res.status(400).json(r);
+  res.json(r);
+});
+
+app.post('/api/supplier/verify-otp', (req, res) => {
+  const r = portal.verifyOtp((req.body.whatsapp || '').trim(), (req.body.code || '').trim());
+  if (r.error) return res.status(400).json(r);
+  res.json(r);
+});
+
+function requireSupplier(req, res, next) {
+  const t = (req.headers.authorization || '').replace('Bearer ', '');
+  const sup = portal.supplierFromToken(t);
+  if (!sup) return res.status(401).json({ error: 'الجلسة منتهية، سجّل دخولك مجددًا' });
+  req.supplier = sup;
+  next();
+}
+
+app.get('/api/supplier/dashboard', requireSupplier, (req, res) => {
+  res.json(portal.dashboardData(req.supplier.id));
+});
+
+// ===== التقارير (إدارة) =====
+const reports = require('./reports');
+
+app.get('/api/admin/reports/:type', requireAdmin, (req, res) => {
+  const f = { from: req.query.from, to: req.query.to, brand: req.query.brand, condition: req.query.condition };
+  let data;
+  switch (req.params.type) {
+    case 'brands': data = reports.topBrands(f); break;
+    case 'parts': data = reports.topParts(f); break;
+    case 'conditions': data = reports.conditionBreakdown(f); break;
+    case 'customers': data = reports.topCustomers(f); break;
+    case 'suppliers': data = reports.supplierPerformance(); break;
+    case 'revenue': data = reports.revenue(f); break;
+    case 'funnel': data = reports.funnel(f); break;
+    default: return res.status(404).json({ error: 'تقرير غير معروف' });
+  }
+  // تصدير CSV لو طُلب
+  if (req.query.format === 'csv' && Array.isArray(data)) {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.type}.csv"`);
+    return res.send(reports.toCSV(data));
+  }
+  res.json(data);
+});
+
+// ===== استقبال ردود الموردين (Webhook) =====
+const { parseReply } = require('./reply_parser');
+
+// يستقبل: { from: رقم المورد, text: نص الرد, item_id: معرّف القطعة }
+// في الواقع، item_id يُستخرج من سياق المحادثة أو من معرّف الطلب المرسل سابقًا
+app.post('/api/webhook/reply', (req, res) => {
+  const { from, text, item_id } = req.body;
+  if (!from || !item_id) return res.status(400).json({ error: 'بيانات ناقصة' });
+
+  const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(from);
+  if (!supplier) return res.status(404).json({ error: 'مورد غير معروف' });
+
+  const parsed = parseReply(text || '');
+  if (!parsed.ok) {
+    // رد غير مفهوم — نطلب توضيحًا (يُرسل عبر الواتساب لاحقًا)
+    return res.json({ understood: false, hint: 'لم نفهم السعر، أرسل الرقم فقط' });
+  }
+
+  // حساب زمن الرد (الفرق بين إنشاء القطعة والرد)
+  const item = db.prepare('SELECT created_at FROM request_items WHERE id = ?').get(item_id);
+  let replySeconds = 0;
+  if (item) {
+    const created = new Date(item.created_at + 'Z').getTime();
+    replySeconds = Math.max(0, Math.round((Date.now() - created) / 1000));
+  }
+
+  requestsLib.recordOfferFromReply({
+    supplier_id: supplier.id, item_id,
+    available: parsed.available, price: parsed.price, reply_seconds: replySeconds,
+  });
+
+  res.json({ understood: true, available: parsed.available, price: parsed.price });
+});
+
+// ===== النسخ الاحتياطي (إدارة) =====
+const backup = require('./backup');
+
+app.post('/api/admin/backup/run', requireAdmin, async (req, res) => {
+  const r = await backup.runBackup({ email: req.body.email !== false });
+  res.json(r);
+});
+
+app.get('/api/admin/backup/download', requireAdmin, (req, res) => {
+  res.download(backup.DB_PATH, 'carly-backup.db');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Carly server يعمل على المنفذ ${PORT}`);
+  try { backup.startSchedule(); } catch (e) { console.error('فشل جدولة النسخ:', e.message); }
+});
+
+module.exports = app;

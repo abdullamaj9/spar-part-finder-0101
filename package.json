@@ -1,0 +1,19 @@
+{
+  "name": "carly",
+  "version": "1.0.0",
+  "description": "كارلي — وكيل قطع الغيار الذكي عبر الواتساب",
+  "main": "brands.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "nodemailer": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
