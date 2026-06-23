@@ -113,6 +113,14 @@ db.exec(`
     used INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   );
+
+  -- تتبّع البث: أي قطعة أُرسلت لأي مورد (لربط الرد النصي بالقطعة)
+  CREATE TABLE IF NOT EXISTS broadcasts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER,
+    supplier_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
 `);
 
 // إعدادات افتراضية قابلة للتعديل من اللوحة

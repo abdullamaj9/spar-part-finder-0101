@@ -69,4 +69,27 @@ function buildWinnerNotice({ brand, model, itemsCount, charged, balance }) {
     `للتفاصيل / Details: [رابط لوحتك]`;
 }
 
-module.exports = { sendText, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
+// إرسال طلب للمورد: أزرار تفاعلية عبر Meta، أو نص في mock
+async function sendSupplierRequest(toWhatsapp, itemData, fallbackText) {
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: [أزرار] ${fallbackText.slice(0, 50)}...`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const payload = buildSupplierButtons(itemData);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        ...payload,
+      }),
+    });
+    return await res.json();
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
+module.exports = { sendText, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };

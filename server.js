@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { db, getSetting, setSetting } = require('./db');
 const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
-const { sendText, buildSupplierMessage } = require('./whatsapp');
+const { sendText, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
 const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
 
 const app = express();
@@ -123,13 +123,19 @@ app.post('/api/requests', async (req, res) => {
     // البث للموردين المؤهلين
     const targets = requestsLib.broadcastTargets(requestId);
     let sent = 0;
+    const recordBroadcast = db.prepare('INSERT INTO broadcasts (item_id, supplier_id) VALUES (?, ?)');
     for (const t of targets) {
       for (const sup of t.suppliers) {
         const msg = buildSupplierMessage({
           requestId, itemId: t.item.id, brand, model, year,
           partName: t.item.part_name, condition: t.item.part_condition,
         });
-        await sendText(sup.whatsapp, msg);
+        // إرسال أزرار تفاعلية (متوفر/غير متوفر) عبر Meta، أو نص في mock
+        await sendSupplierRequest(sup.whatsapp, {
+          requestId, itemId: t.item.id, brand, model, year,
+          partName: t.item.part_name, condition: t.item.part_condition,
+        }, msg);
+        recordBroadcast.run(t.item.id, sup.id); // تسجيل البث لربط الرد لاحقًا
         sent++;
       }
     }
@@ -213,22 +219,73 @@ app.get('/api/admin/reports/:type', requireAdmin, (req, res) => {
 // ===== استقبال ردود الموردين (Webhook) =====
 const { parseReply } = require('./reply_parser');
 
-// يستقبل: { from: رقم المورد, text: نص الرد, item_id: معرّف القطعة }
-// في الواقع، item_id يُستخرج من سياق المحادثة أو من معرّف الطلب المرسل سابقًا
-app.post('/api/webhook/reply', (req, res) => {
-  const { from, text, item_id } = req.body;
-  if (!from || !item_id) return res.status(400).json({ error: 'بيانات ناقصة' });
+// تحقق Meta من الـ webhook (GET) — مطلوب لربط الرابط في Meta
+app.get('/api/webhook/reply', (req, res) => {
+  const verifyToken = process.env.WA_VERIFY_TOKEN || 'carly_verify';
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === verifyToken) {
+    return res.status(200).send(challenge); // Meta تتوقّع إرجاع الـ challenge
+  }
+  return res.sendStatus(403);
+});
 
+// استقبال ردود الموردين من Meta (POST)
+// يدعم: صيغة Meta الحقيقية (أزرار + نص) + الصيغة المبسّطة للاختبار
+app.post('/api/webhook/reply', (req, res) => {
+  // Meta تتطلب رد 200 سريعًا، نعالج ثم نرد
+  try {
+    // الصيغة المبسّطة للاختبار: { from, text, item_id }
+    if (req.body.from && req.body.item_id) {
+      return handleReply(req.body.from, req.body.text, req.body.item_id, res);
+    }
+
+    // صيغة Meta الحقيقية: بنية متداخلة
+    const entry = req.body.entry?.[0];
+    const change = entry?.changes?.[0];
+    const message = change?.value?.messages?.[0];
+    if (!message) return res.sendStatus(200); // إشعار حالة (تسليم/قراءة)، نتجاهله
+
+    const from = message.from; // رقم المورد
+    let text = '';
+    let itemId = null;
+
+    if (message.type === 'interactive' && message.interactive?.button_reply) {
+      // ضغط زر: id مثل avail_5 أو unavail_5
+      const btnId = message.interactive.button_reply.id;
+      const m = btnId.match(/^(avail|unavail)_(\d+)$/);
+      if (m) {
+        itemId = parseInt(m[2], 10);
+        text = m[1] === 'avail' ? 'متوفر' : 'غير متوفر';
+      }
+    } else if (message.type === 'text') {
+      // رد نصي (سعر) — نربطه بآخر قطعة بُثّت لهذا المورد
+      text = message.text.body;
+      const lastReq = db.prepare(`
+        SELECT b.item_id FROM broadcasts b
+        JOIN suppliers s ON s.id = b.supplier_id
+        WHERE s.whatsapp = ? ORDER BY b.id DESC LIMIT 1
+      `).get(from);
+      itemId = lastReq?.item_id || null;
+    }
+
+    if (from && itemId) return handleReply(from, text, itemId, res);
+    return res.sendStatus(200);
+  } catch (e) {
+    console.error('webhook error:', e.message);
+    return res.sendStatus(200); // نرد 200 دائمًا لئلا تعيد Meta الإرسال
+  }
+});
+
+// المعالج المشترك: يحلّل الرد ويسجّل العرض
+function handleReply(from, text, item_id, res) {
   const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(from);
-  if (!supplier) return res.status(404).json({ error: 'مورد غير معروف' });
+  if (!supplier) return res.sendStatus(200);
 
   const parsed = parseReply(text || '');
-  if (!parsed.ok) {
-    // رد غير مفهوم — نطلب توضيحًا (يُرسل عبر الواتساب لاحقًا)
-    return res.json({ understood: false, hint: 'لم نفهم السعر، أرسل الرقم فقط' });
-  }
+  if (!parsed.ok) return res.json({ understood: false });
 
-  // حساب زمن الرد (الفرق بين إنشاء القطعة والرد)
   const item = db.prepare('SELECT created_at FROM request_items WHERE id = ?').get(item_id);
   let replySeconds = 0;
   if (item) {
@@ -240,9 +297,8 @@ app.post('/api/webhook/reply', (req, res) => {
     supplier_id: supplier.id, item_id,
     available: parsed.available, price: parsed.price, reply_seconds: replySeconds,
   });
-
-  res.json({ understood: true, available: parsed.available, price: parsed.price });
-});
+  return res.json({ understood: true, available: parsed.available, price: parsed.price });
+}
 
 // ===== النسخ الاحتياطي (إدارة) =====
 const backup = require('./backup');
