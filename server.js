@@ -65,7 +65,8 @@ app.post('/api/admin/suppliers', requireAdmin, (req, res) => {
     const s = suppliersLib.addSupplier(req.body);
     res.json(s);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    console.error('خطأ في حفظ المورد:', e.message);
+    res.status(400).json({ error: 'تعذّر حفظ المورد، تحقّق من البيانات' });
   }
 });
 
@@ -127,21 +128,28 @@ app.post('/api/requests', async (req, res) => {
     const carDesc = `${brand} ${model || ''} ${year || ''}`.trim();
     for (const t of targets) {
       for (const sup of t.suppliers) {
-        // إرسال عبر القالب المعتمد (car, part, type, vin)
-        await sendTemplateRequest(sup.whatsapp, {
-          car: carDesc,
-          part: t.item.part_name,
-          type: t.item.part_condition,
-          vin: vin,
-        });
-        recordBroadcast.run(t.item.id, sup.id); // تسجيل البث لربط الرد لاحقًا
-        sent++;
+        // عزل كل إرسال: فشل مورد لا يُفشل الطلب كله ولا يسرّب أي تفاصيل
+        try {
+          await sendTemplateRequest(sup.whatsapp, {
+            car: carDesc,
+            part: t.item.part_name,
+            type: t.item.part_condition,
+            vin: vin,
+          });
+          recordBroadcast.run(t.item.id, sup.id);
+          sent++;
+        } catch (sendErr) {
+          // نسجّل في الخادم فقط (لا يصل للمتصفح أبدًا) — دون كشف التوكن
+          console.error(`فشل إرسال لمورد ${sup.id}:`, String(sendErr.message || sendErr).slice(0, 200));
+        }
       }
     }
 
     res.json({ requestId, itemIds, suppliers_notified: sent });
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    // رسالة عامة للمتصفح، والتفاصيل في سجل الخادم فقط
+    console.error('خطأ في إنشاء الطلب:', e.message);
+    res.status(400).json({ error: 'تعذّر إنشاء الطلب، حاول مجددًا' });
   }
 });
 

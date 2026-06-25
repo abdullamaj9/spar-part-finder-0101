@@ -2,9 +2,10 @@
 // تدعم: WhatsApp Business API الرسمي (عبر مزوّد) + وضع محاكاة للاختبار المحلي
 // تربط مفاتيحك عبر متغيرات البيئة دون تغيير أي منطق
 
-const PROVIDER = process.env.WA_PROVIDER || 'mock'; // mock | meta
-const META_TOKEN = process.env.WA_META_TOKEN || '';
-const META_PHONE_ID = process.env.WA_META_PHONE_ID || '';
+const PROVIDER = (process.env.WA_PROVIDER || 'mock').trim(); // mock | meta
+// trim() يزيل أي مسافة/سطر جديد خفي قد يسبب "invalid header value"
+const META_TOKEN = (process.env.WA_META_TOKEN || '').trim();
+const META_PHONE_ID = (process.env.WA_META_PHONE_ID || '').trim();
 
 // إرسال قالب معتمد (للاختبار: hello_world) — يثبت أن الإرسال يعمل
 async function sendTemplate(toWhatsapp, templateName = 'hello_world', lang = 'en_US') {
@@ -61,7 +62,13 @@ async function sendTemplateRequest(toWhatsapp, { car, part, type, vin }) {
         },
       }),
     });
-    return await res.json();
+    const data = await res.json();
+    // فحص نجاح Meta — عند الفشل نرمي خطأ نظيفًا (سبب Meta فقط، لا التوكن)
+    if (!res.ok || data.error) {
+      const reason = data.error ? `${data.error.code}: ${data.error.message}` : `HTTP ${res.status}`;
+      throw new Error('WhatsApp send failed — ' + reason);
+    }
+    return data;
   }
   throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
 }
