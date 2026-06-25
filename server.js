@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { db, getSetting, setSetting } = require('./db');
 const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
-const { sendText, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
+const { sendText, sendTemplateRequest, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
 const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
 
 const app = express();
@@ -120,21 +120,20 @@ app.post('/api/requests', async (req, res) => {
       customer_id: cust.id, brand, model, year, vin, items,
     });
 
-    // البث للموردين المؤهلين
+    // البث للموردين المؤهلين عبر القالب المعتمد part_request
     const targets = requestsLib.broadcastTargets(requestId);
     let sent = 0;
     const recordBroadcast = db.prepare('INSERT INTO broadcasts (item_id, supplier_id) VALUES (?, ?)');
+    const carDesc = `${brand} ${model || ''} ${year || ''}`.trim();
     for (const t of targets) {
       for (const sup of t.suppliers) {
-        const msg = buildSupplierMessage({
-          requestId, itemId: t.item.id, brand, model, year,
-          partName: t.item.part_name, condition: t.item.part_condition,
+        // إرسال عبر القالب المعتمد (car, part, type, vin)
+        await sendTemplateRequest(sup.whatsapp, {
+          car: carDesc,
+          part: t.item.part_name,
+          type: t.item.part_condition,
+          vin: vin,
         });
-        // إرسال أزرار تفاعلية (متوفر/غير متوفر) عبر Meta، أو نص في mock
-        await sendSupplierRequest(sup.whatsapp, {
-          requestId, itemId: t.item.id, brand, model, year,
-          partName: t.item.part_name, condition: t.item.part_condition,
-        }, msg);
         recordBroadcast.run(t.item.id, sup.id); // تسجيل البث لربط الرد لاحقًا
         sent++;
       }
@@ -218,6 +217,7 @@ app.get('/api/admin/reports/:type', requireAdmin, (req, res) => {
 
 // ===== استقبال ردود الموردين (Webhook) =====
 const { parseReply } = require('./reply_parser');
+const { normalizePhone } = require('./phone');
 
 // تحقق Meta من الـ webhook (GET) — مطلوب لربط الرابط في Meta
 app.get('/api/webhook/reply', (req, res) => {
@@ -262,11 +262,12 @@ app.post('/api/webhook/reply', (req, res) => {
     } else if (message.type === 'text') {
       // رد نصي (سعر) — نربطه بآخر قطعة بُثّت لهذا المورد
       text = message.text.body;
+      const normFrom = normalizePhone(from);
       const lastReq = db.prepare(`
         SELECT b.item_id FROM broadcasts b
         JOIN suppliers s ON s.id = b.supplier_id
         WHERE s.whatsapp = ? ORDER BY b.id DESC LIMIT 1
-      `).get(from);
+      `).get(normFrom);
       itemId = lastReq?.item_id || null;
     }
 
@@ -280,7 +281,8 @@ app.post('/api/webhook/reply', (req, res) => {
 
 // المعالج المشترك: يحلّل الرد ويسجّل العرض
 function handleReply(from, text, item_id, res) {
-  const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(from);
+  const normFrom = normalizePhone(from);
+  const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(normFrom);
   if (!supplier) return res.sendStatus(200);
 
   const parsed = parseReply(text || '');

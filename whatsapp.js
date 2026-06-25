@@ -6,6 +6,66 @@ const PROVIDER = process.env.WA_PROVIDER || 'mock'; // mock | meta
 const META_TOKEN = process.env.WA_META_TOKEN || '';
 const META_PHONE_ID = process.env.WA_META_PHONE_ID || '';
 
+// إرسال قالب معتمد (للاختبار: hello_world) — يثبت أن الإرسال يعمل
+async function sendTemplate(toWhatsapp, templateName = 'hello_world', lang = 'en_US') {
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: [template ${templateName}]`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        type: 'template',
+        template: { name: templateName, language: { code: lang } },
+      }),
+    });
+    return await res.json();
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
+// إرسال طلب للمورد عبر القالب المعتمد part_request (المتغيرات الأربعة)
+// car=السيارة، part=القطعة، type=النوع، vin=الشاسيه (أو "Not provided")
+async function sendTemplateRequest(toWhatsapp, { car, part, type, vin }) {
+  const vinValue = (vin && vin.trim()) ? vin.trim() : 'Not provided';
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: [template part_request] ${car} | ${part} | ${type} | ${vinValue}`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        type: 'template',
+        template: {
+          name: 'part_request',
+          language: { code: 'en' },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: car },
+              { type: 'text', text: part },
+              { type: 'text', text: type },
+              { type: 'text', text: vinValue },
+            ],
+          }],
+        },
+      }),
+    });
+    return await res.json();
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
 async function sendText(toWhatsapp, text) {
   if (PROVIDER === 'mock') {
     console.log(`[WA mock] → ${toWhatsapp}: ${text.slice(0, 60)}...`);
@@ -92,4 +152,4 @@ async function sendSupplierRequest(toWhatsapp, itemData, fallbackText) {
   throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
 }
 
-module.exports = { sendText, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
+module.exports = { sendText, sendTemplateRequest, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
