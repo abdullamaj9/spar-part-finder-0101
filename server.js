@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { db, getSetting, setSetting } = require('./db');
 const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
-const { sendText, sendTemplateRequest, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
+const { sendText, sendTemplateRequest, sendDealWon, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
 const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
 
 const app = express();
@@ -160,9 +160,28 @@ app.get('/api/items/:id/offers', (req, res) => {
 
 // العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
 // body: { choices: [{ item_id, offer_id }, ...] }
-app.post('/api/requests/choose', (req, res) => {
+app.post('/api/requests/choose', async (req, res) => {
   const r = requestsLib.chooseWinners(req.body.choices || []);
   if (r.error) return res.status(400).json(r);
+
+  // إشعار كل مورد فائز عبر قالب deal_won (مع رقم العميل ليتواصل معه)
+  if (r.winners && r.winners.length) {
+    for (const w of r.winners) {
+      try {
+        const reqRow = db.prepare('SELECT r.*, c.whatsapp AS cust_whatsapp FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(w.request_id);
+        if (reqRow) {
+          const carDesc = `${reqRow.brand} ${reqRow.model || ''} ${reqRow.year || ''}`.trim();
+          await sendDealWon(w.whatsapp, {
+            car: carDesc,
+            part: `${w.items_won} قطعة`,
+            customerContact: reqRow.cust_whatsapp,
+          });
+        }
+      } catch (e) {
+        console.error(`فشل إشعار الفائز ${w.supplier_id}:`, String(e.message || e).slice(0, 150));
+      }
+    }
+  }
   res.json(r);
 });
 

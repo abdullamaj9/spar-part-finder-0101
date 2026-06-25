@@ -159,4 +159,43 @@ async function sendSupplierRequest(toWhatsapp, itemData, fallbackText) {
   throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
 }
 
-module.exports = { sendText, sendTemplateRequest, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
+// إشعار المورد الفائز عبر قالب deal_won (car, part, customerContact)
+async function sendDealWon(toWhatsapp, { car, part, customerContact }) {
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: [template deal_won] ${car} | ${part} | ${customerContact}`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        type: 'template',
+        template: {
+          name: 'deal_won',
+          language: { code: 'en' },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: car },
+              { type: 'text', text: part },
+              { type: 'text', text: customerContact },
+            ],
+          }],
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      const reason = data.error ? `${data.error.code}: ${data.error.message}` : `HTTP ${res.status}`;
+      throw new Error('deal_won send failed — ' + reason);
+    }
+    return data;
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
+module.exports = { sendText, sendTemplateRequest, sendDealWon, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
