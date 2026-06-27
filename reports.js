@@ -109,7 +109,35 @@ function toCSV(rows) {
   return '\uFEFF' + lines.join('\n'); // BOM لدعم العربية في Excel
 }
 
+// تقرير كامل: كل قطعة طُلبت + الماركة + من فاز بها + سعره
+function partsWinners(f = {}) {
+  const where = [];
+  const args = [];
+  if (f.from) { where.push("r.created_at >= ?"); args.push(f.from); }
+  if (f.to) { where.push("r.created_at <= ?"); args.push(f.to + ' 23:59:59'); }
+  if (f.brand) { where.push("r.brand = ?"); args.push(f.brand); }
+  const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  return db.prepare(`
+    SELECT
+      r.created_at AS التاريخ,
+      r.brand AS الماركة,
+      r.model AS الموديل,
+      ri.part_name AS القطعة,
+      ri.part_condition AS النوع,
+      ri.status AS الحالة,
+      COALESCE(sup.name, '—') AS المورد_الفائز,
+      wo.price AS السعر_الفائز,
+      (SELECT COUNT(*) FROM offers o WHERE o.item_id = ri.id) AS عدد_العروض
+    FROM request_items ri
+    JOIN requests r ON r.id = ri.request_id
+    LEFT JOIN suppliers sup ON sup.id = ri.winner_supplier_id
+    LEFT JOIN offers wo ON wo.item_id = ri.id AND wo.supplier_id = ri.winner_supplier_id
+    ${clause}
+    ORDER BY r.created_at DESC
+  `).all(...args);
+}
+
 module.exports = {
   topBrands, topParts, conditionBreakdown, topCustomers,
-  supplierPerformance, revenue, funnel, toCSV
+  supplierPerformance, revenue, funnel, partsWinners, toCSV
 };
