@@ -52,6 +52,8 @@ db.exec(`
     image_url TEXT DEFAULT '',
     status TEXT DEFAULT 'open',      -- open | collecting | chosen | closed
     winner_supplier_id INTEGER,
+    deadline TEXT DEFAULT '',        -- موعد انتهاء مهلة التسعير (ISO) — يُحسب لحظة البث
+    expected_count INTEGER DEFAULT 0,-- عدد الموردين الذين أُرسل لهم الطلب (المتوقَّع ردهم)
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (request_id) REFERENCES requests(id)
   );
@@ -123,7 +125,17 @@ db.exec(`
   );
 `);
 
-// إعدادات افتراضية قابلة للتعديل من اللوحة
+// ===== ترقية آمنة: إضافة أعمدة جديدة لقواعد البيانات الموجودة مسبقًا =====
+// (CREATE TABLE IF NOT EXISTS لا يضيف أعمدة لجدول موجود، فنضيفها يدويًا)
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[migration] أُضيف العمود ${table}.${column}`);
+  }
+}
+ensureColumn('request_items', 'deadline', "TEXT DEFAULT ''");
+ensureColumn('request_items', 'expected_count', 'INTEGER DEFAULT 0');
 const DEFAULT_SETTINGS = {
   free_leads: '2',              // أول طلبين فائزين مجانًا لكل مورد
   lead_fee: '5',               // رسوم الـ Lead للقطعة الأولى بالدرهم
@@ -136,6 +148,8 @@ const DEFAULT_SETTINGS = {
   score_weight_completion: '0.3',
   score_weight_speed: '0.2',
   countdown_seconds: '90',
+  countdown_per_item: '30',     // ثوانٍ إضافية لكل قطعة بعد الأولى
+  countdown_max: '240',         // الحد الأقصى لمهلة التسعير بالثواني
   backup_interval_hours: '24',  // فترة النسخ الاحتياطي التلقائي بالساعات
 };
 

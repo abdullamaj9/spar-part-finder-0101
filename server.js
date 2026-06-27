@@ -124,9 +124,11 @@ app.post('/api/requests', async (req, res) => {
     // البث للموردين المؤهلين عبر القالب المعتمد part_request
     const targets = requestsLib.broadcastTargets(requestId);
     let sent = 0;
+    const sentCounts = {}; // item_id -> عدد الموردين الذين وصلهم الطلب فعليًا
     const recordBroadcast = db.prepare('INSERT INTO broadcasts (item_id, supplier_id) VALUES (?, ?)');
     const carDesc = `${brand} ${model || ''} ${year || ''}`.trim();
     for (const t of targets) {
+      sentCounts[t.item.id] = 0;
       for (const sup of t.suppliers) {
         // عزل كل إرسال: فشل مورد لا يُفشل الطلب كله ولا يسرّب أي تفاصيل
         try {
@@ -137,6 +139,7 @@ app.post('/api/requests', async (req, res) => {
             vin: vin,
           });
           recordBroadcast.run(t.item.id, sup.id);
+          sentCounts[t.item.id]++;
           sent++;
         } catch (sendErr) {
           // نسجّل في الخادم فقط (لا يصل للمتصفح أبدًا) — دون كشف التوكن
@@ -145,7 +148,11 @@ app.post('/api/requests', async (req, res) => {
       }
     }
 
-    res.json({ requestId, itemIds, suppliers_notified: sent });
+    // بدء التايمر المتدرّج: يضبط لكل قطعة موعد الانتهاء وعدد الموردين المتوقَّع
+    const timer = requestsLib.startTimers(requestId, itemIds, sentCounts);
+
+    res.json({ requestId, itemIds, suppliers_notified: sent,
+      deadline: timer.deadline, countdown_seconds: timer.seconds });
   } catch (e) {
     // رسالة عامة للمتصفح، والتفاصيل في سجل الخادم فقط
     console.error('خطأ في إنشاء الطلب:', e.message);
@@ -156,6 +163,12 @@ app.post('/api/requests', async (req, res) => {
 // عروض قطعة (للعرض على العميل)
 app.get('/api/items/:id/offers', (req, res) => {
   res.json(requestsLib.offersForItem(parseInt(req.params.id, 10)));
+});
+
+// حالة السلة: هل النتائج جاهزة؟ كم الوقت المتبقي؟ (يستخدمها العميل للعداد التنازلي)
+// ready=true يعني: ردّ كل الموردين أو انتهت المهلة — العروض جاهزة للاختيار.
+app.get('/api/requests/:id/status', (req, res) => {
+  res.json(requestsLib.requestStatus(parseInt(req.params.id, 10)));
 });
 
 // العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
@@ -231,6 +244,7 @@ app.get('/api/admin/reports/:type', requireAdmin, (req, res) => {
     case 'suppliers': data = reports.supplierPerformance(); break;
     case 'revenue': data = reports.revenue(f); break;
     case 'funnel': data = reports.funnel(f); break;
+    case 'parts-winners': data = reports.partsWinners(f); break;
     default: return res.status(404).json({ error: 'تقرير غير معروف' });
   }
   // تصدير CSV لو طُلب
@@ -322,11 +336,12 @@ function handleReply(from, text, item_id, res) {
     replySeconds = Math.max(0, Math.round((Date.now() - created) / 1000));
   }
 
-  requestsLib.recordOfferFromReply({
+  const r = requestsLib.recordOfferFromReply({
     supplier_id: supplier.id, item_id,
     available: parsed.available, price: parsed.price, reply_seconds: replySeconds,
   });
-  return res.json({ understood: true, available: parsed.available, price: parsed.price });
+  return res.json({ understood: true, available: parsed.available, price: parsed.price,
+    item_ready: r?.ready?.ready || false });
 }
 
 // ===== النسخ الاحتياطي (إدارة) =====

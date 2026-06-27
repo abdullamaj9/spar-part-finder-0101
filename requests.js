@@ -32,6 +32,88 @@ function broadcastTargets(requestId) {
   }));
 }
 
+// ===== منطق التايمر المتدرّج =====
+// المهلة = الأساس (90) + (عدد القطع في السلة - 1) × لكل قطعة (30)، بحد أقصى (240).
+// ملاحظة: المهلة محسوبة على مستوى السلة كاملة (كل قطعها لها نفس الموعد).
+function computeDeadlineSeconds(itemCount) {
+  const base = parseInt(getSetting('countdown_seconds'), 10) || 90;
+  const per = parseInt(getSetting('countdown_per_item'), 10) || 30;
+  const max = parseInt(getSetting('countdown_max'), 10) || 240;
+  const total = base + Math.max(0, itemCount - 1) * per;
+  return Math.min(total, max);
+}
+
+// يُستدعى لحظة بثّ الطلب للموردين: يضبط لكل قطعة موعد الانتهاء وعدد الموردين المتوقَّع.
+// لا يسجّل broadcasts (server.js يسجّلها عند نجاح الإرسال فقط). يستقبل خريطة
+// sentCounts: { item_id: عدد الموردين الذين وصلهم الطلب فعليًا }.
+function startTimers(requestId, itemIds, sentCounts = {}) {
+  const itemCount = itemIds.length;
+  const seconds = computeDeadlineSeconds(itemCount);
+  const deadline = new Date(Date.now() + seconds * 1000).toISOString();
+
+  const setDl = db.prepare(`
+    UPDATE request_items SET deadline = ?, expected_count = ?, status = 'collecting' WHERE id = ?
+  `);
+  for (const itemId of itemIds) {
+    const expected = sentCounts[itemId] || 0;
+    setDl.run(deadline, expected, itemId);
+    logEvent('broadcast', { request_id: requestId, item_id: itemId,
+      detail: { expected, deadline, seconds } });
+  }
+  db.prepare("UPDATE requests SET status = 'collecting' WHERE id = ?").run(requestId);
+  return { deadline, seconds, items: itemCount };
+}
+
+// كم مورد ردّ فعليًا على هذه القطعة (عروض فريدة لكل مورد)
+function offerCountForItem(itemId) {
+  const row = db.prepare(
+    'SELECT COUNT(DISTINCT supplier_id) AS n FROM offers WHERE item_id = ?'
+  ).get(itemId);
+  return row ? row.n : 0;
+}
+
+// الفحص اللحظي: هل القطعة جاهزة لعرض النتائج؟
+// جاهزة إذا: (أ) ردّ كل الموردين المتوقَّعين، أو (ب) انتهت المهلة.
+// لا تُقفل قطعة سبق حسمها يدويًا. تُرجع حالة القطعة.
+function checkItemReady(itemId) {
+  const item = db.prepare('SELECT * FROM request_items WHERE id = ?').get(itemId);
+  if (!item) return { ready: false, reason: 'not_found' };
+  if (item.status === 'chosen' || item.status === 'closed') {
+    return { ready: true, reason: item.status, status: item.status };
+  }
+
+  const replied = offerCountForItem(itemId);
+  const expected = item.expected_count || 0;
+  const allReplied = expected > 0 && replied >= expected;
+
+  const now = Date.now();
+  const dl = item.deadline ? new Date(item.deadline).getTime() : 0;
+  const timeUp = dl > 0 && now >= dl;
+
+  if (allReplied || timeUp) {
+    // القطعة جاهزة: العروض صارت متاحة للعميل ليختار. نعلّمها 'ready'.
+    db.prepare("UPDATE request_items SET status = 'ready' WHERE id = ? AND status = 'collecting'").run(itemId);
+    logEvent('offer_received', { item_id: itemId,
+      detail: { ready: true, reason: allReplied ? 'all_replied' : 'time_up', replied, expected } });
+    return { ready: true, reason: allReplied ? 'all_replied' : 'time_up', replied, expected, status: 'ready' };
+  }
+
+  const secondsLeft = dl > 0 ? Math.max(0, Math.round((dl - now) / 1000)) : null;
+  return { ready: false, replied, expected, seconds_left: secondsLeft, deadline: item.deadline, status: item.status };
+}
+
+// حالة السلة كاملة: جاهزة لعرض النتائج لو كل قطعها جاهزة
+function requestStatus(requestId) {
+  const items = db.prepare('SELECT id FROM request_items WHERE request_id = ?').all(requestId);
+  if (!items.length) return { ready: false, items: [] };
+  const states = items.map(i => ({ item_id: i.id, ...checkItemReady(i.id) }));
+  const ready = states.every(s => s.ready);
+  // أقصى وقت متبقٍ بين القطع (للعداد التنازلي في الواجهة)
+  const lefts = states.map(s => s.seconds_left).filter(v => typeof v === 'number');
+  const seconds_left = lefts.length ? Math.max(...lefts) : 0;
+  return { ready, seconds_left, items: states };
+}
+
 // تسجيل عرض من مورد لقطعة
 function recordOffer({ item_id, supplier_id, price, available, reply_seconds }) {
   const info = db.prepare(`
@@ -170,21 +252,27 @@ function chooseWinners(choices) {
 function recordOfferFromReply({ supplier_id, item_id, available, price, reply_seconds }) {
   // منع التكرار: لو سبق للمورد عرض على نفس القطعة، نحدّثه
   const existing = db.prepare('SELECT id FROM offers WHERE item_id = ? AND supplier_id = ?').get(item_id, supplier_id);
+  let offerId;
   if (existing) {
     db.prepare('UPDATE offers SET price = ?, available = ?, reply_seconds = ? WHERE id = ?')
       .run(price, available ? 1 : 0, reply_seconds || 0, existing.id);
     logEvent('offer_received', { item_id, supplier_id, amount: price || 0, detail: 'updated' });
-    return existing.id;
+    offerId = existing.id;
+  } else {
+    const info = db.prepare(`
+      INSERT INTO offers (item_id, supplier_id, price, available, reply_seconds)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(item_id, supplier_id, price, available ? 1 : 0, reply_seconds || 0);
+    logEvent('offer_received', { item_id, supplier_id, amount: price || 0 });
+    offerId = info.lastInsertRowid;
   }
-  const info = db.prepare(`
-    INSERT INTO offers (item_id, supplier_id, price, available, reply_seconds)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(item_id, supplier_id, price, available ? 1 : 0, reply_seconds || 0);
-  logEvent('offer_received', { item_id, supplier_id, amount: price || 0 });
-  return info.lastInsertRowid;
+  // فحص لحظي: هل ردّ كل الموردين الآن؟ لو نعم، القطعة تصبح جاهزة فورًا (يوقف الانتظار)
+  const ready = checkItemReady(item_id);
+  return { offer_id: offerId, ready };
 }
 
 module.exports = {
   createRequest, broadcastTargets, recordOffer, recordOfferFromReply,
-  offersForItem, chooseWinners, computeSupplierFee, supplierBaskets
+  offersForItem, chooseWinners, computeSupplierFee, supplierBaskets,
+  computeDeadlineSeconds, startTimers, checkItemReady, requestStatus, offerCountForItem
 };
