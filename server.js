@@ -171,6 +171,15 @@ app.get('/api/requests/:id/status', (req, res) => {
   res.json(requestsLib.requestStatus(parseInt(req.params.id, 10)));
 });
 
+// نقطة فحص مؤقتة: آخر طلب بالنظام + حالة التايمر كاملة (للاختبار)
+app.get('/api/debug/last-request', (req, res) => {
+  const last = db.prepare('SELECT * FROM requests ORDER BY id DESC LIMIT 1').get();
+  if (!last) return res.json({ message: 'لا يوجد أي طلب بعد' });
+  const items = db.prepare('SELECT id, part_name, status, deadline, expected_count FROM request_items WHERE request_id = ?').all(last.id);
+  const status = requestsLib.requestStatus(last.id);
+  res.json({ request: last, items, timer_status: status });
+});
+
 // العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
 // body: { choices: [{ item_id, offer_id }, ...] }
 app.post('/api/requests/choose', async (req, res) => {
