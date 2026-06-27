@@ -250,6 +250,7 @@ async function submitRequest() {
   currentItemIds = data.itemIds;
   currentRequestId = data.requestId;
   window.requestedParts = items.map(i => i.part_name); // لنصائح الانتظار
+  window.suppliersNotified = data.suppliers_notified || 0; // عدد الموردين المبثوث لهم
   startCountdown();
 }
 
@@ -285,13 +286,19 @@ function buildTips() {
 }
 
 async function checkOffersReady() {
-  // يفحص هل وصل عرض واحد على الأقل لكل قطعة (فلا داعي لانتظار بقية الوقت)
+  // يوقف العداد مبكرًا فقط لو ردّ كل الموردين المبثوث لهم (عدالة للجميع)
+  // وإلا ننتظر الـ90 ثانية كاملة لجمع أكبر عدد من العروض
   try {
+    const notified = window.suppliersNotified || 0;
+    if (notified === 0) return false; // لا موردين، ننتظر الوقت كاملًا
+    // نعدّ إجمالي العروض الواصلة عبر كل القطع
+    let totalOffers = 0;
     for (const itemId of currentItemIds) {
       const offers = await (await fetch('/api/items/' + itemId + '/offers')).json();
-      if (!offers || !offers.length) return false; // قطعة لم يصلها عرض بعد
+      totalOffers += (offers ? offers.length : 0);
     }
-    return true; // كل القطع وصلها عرض
+    // نوقف فقط لو وصل عدد العروض = عدد الموردين (أي ردّوا كلهم)
+    return totalOffers >= notified;
   } catch { return false; }
 }
 

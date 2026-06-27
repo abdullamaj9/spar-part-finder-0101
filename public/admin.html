@@ -232,13 +232,38 @@ function downloadBackup(e) {
 
 async function loadSuppliers() {
   const list = await (await authFetch('/api/admin/suppliers')).json();
+  window._suppliers = list; // نخزّنها للتعديل
   document.getElementById('supBody').innerHTML = list.map(s => `
     <tr>
       <td>${s.name}</td><td>${s.whatsapp}</td><td>${s.brands}</td><td>${s.conditions}</td>
       <td><span class="pill ${s.status}">${ {active:'نشط',reserve:'احتياط',inactive:'خامل'}[s.status] }</span></td>
       <td>${s.won_count}</td><td>${s.balance}</td><td>${s.score}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="delSupplier(${s.id})">حذف</button></td>
+      <td>
+        <button class="btn btn-sm" style="background:#1e88e5;color:#fff;margin-left:4px" onclick="editSupplier(${s.id})">تعديل</button>
+        <button class="btn btn-sm btn-danger" onclick="delSupplier(${s.id})">حذف</button>
+      </td>
     </tr>`).join('') || '<tr><td colspan="9" class="muted">لا موردون بعد</td></tr>';
+}
+
+// تعديل مورد: يملأ نموذج الإضافة ببياناته الحالية، ويحوّل الحفظ لتحديث
+function editSupplier(id) {
+  const s = (window._suppliers || []).find(x => x.id === id);
+  if (!s) return;
+  // ننتقل لتبويب الإضافة ونملأه
+  document.querySelector('[onclick*="add"]').click();
+  document.getElementById('s-name').value = s.name;
+  document.getElementById('s-wa').value = s.whatsapp;
+  document.getElementById('s-status').value = s.status;
+  // نعلّم الماركات والأنواع الحالية
+  const brands = (s.brands || '').split(',').map(x=>x.trim());
+  const conds = (s.conditions || '').split(',').map(x=>x.trim());
+  document.querySelectorAll('.brand-cb').forEach(c => c.checked = brands.includes(c.value));
+  document.querySelectorAll('.cond-cb').forEach(c => c.checked = conds.includes(c.value));
+  // نحوّل الزر لوضع التعديل
+  window._editingId = id;
+  const msg = document.getElementById('addMsg');
+  msg.textContent = `وضع التعديل: ${s.name} — عدّل البيانات واضغط حفظ`;
+  msg.style.color = '#1e88e5';
 }
 
 async function addSupplier() {
@@ -252,10 +277,22 @@ async function addSupplier() {
   };
   if (!body.name || !body.whatsapp) { document.getElementById('addMsg').textContent='أدخل الاسم والرقم'; return; }
   if (!brands) { document.getElementById('addMsg').textContent='اختر ماركة واحدة على الأقل'; return; }
-  const res = await authFetch('/api/admin/suppliers', { method:'POST', body: JSON.stringify(body) });
+
+  // وضع التعديل أم الإضافة؟
+  const editId = window._editingId;
+  let res;
+  if (editId) {
+    res = await authFetch('/api/admin/suppliers/'+editId, { method:'PUT', body: JSON.stringify(body) });
+  } else {
+    res = await authFetch('/api/admin/suppliers', { method:'POST', body: JSON.stringify(body) });
+  }
   const data = await res.json();
   if (data.error) { document.getElementById('addMsg').textContent = data.error; return; }
-  document.getElementById('addMsg').textContent = 'أُضيف بنجاح. المنشأ المستنتج: ' + data.origins;
+
+  const msg = document.getElementById('addMsg');
+  msg.style.color = '';
+  msg.textContent = editId ? 'تم تحديث المورد بنجاح ✓' : ('أُضيف بنجاح. المنشأ المستنتج: ' + data.origins);
+  window._editingId = null; // إنهاء وضع التعديل
   document.getElementById('s-name').value=''; document.getElementById('s-wa').value='';
   document.querySelectorAll('.cond-cb:checked, .brand-cb:checked').forEach(c=>c.checked=false);
   loadSuppliers();
