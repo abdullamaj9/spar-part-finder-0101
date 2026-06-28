@@ -180,7 +180,32 @@ app.get('/api/debug/last-request', (req, res) => {
   if (!last) return res.json({ message: 'لا يوجد أي طلب بعد' });
   const items = db.prepare('SELECT id, part_name, status, deadline, expected_count FROM request_items WHERE request_id = ?').all(last.id);
   const status = requestsLib.requestStatus(last.id);
-  res.json({ request: last, items, timer_status: status });
+  // نضيف العروض الواصلة لكل قطعة (لتشخيص هل سُجّلت الردود)
+  const withOffers = items.map(it => ({
+    ...it,
+    offers: requestsLib.offersForItem(it.id),
+  }));
+  res.json({ request: last, items: withOffers, timer_status: status });
+});
+
+// تشخيص: عرض الموردين المسجّلين بأرقامهم المطبّعة (لمطابقة رقم الرد)
+app.get('/api/debug/suppliers', (req, res) => {
+  const sups = db.prepare('SELECT id, name, whatsapp, brands, conditions FROM suppliers').all();
+  res.json({ count: sups.length, suppliers: sups });
+});
+
+// تشخيص: تسجيل مورد اختبار برقم اختبار Meta (لتجربة دورة الرد كاملة)
+// استخدم: /api/debug/add-test-supplier?phone=15556716249&brands=تويوتا&conditions=جديد أصلي
+app.get('/api/debug/add-test-supplier', (req, res) => {
+  const phone = req.query.phone;
+  if (!phone) return res.status(400).json({ error: 'أضف ?phone=الرقم' });
+  const brands = req.query.brands || 'تويوتا';
+  const conditions = req.query.conditions || 'جديد أصلي،جديد تجاري،مستعمل';
+  const norm = normalizePhone(phone);
+  const existing = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(norm);
+  if (existing) return res.json({ message: 'المورد مسجّل مسبقًا', supplier: existing });
+  const sup = suppliersLib.addSupplier({ name: 'مورد اختبار', whatsapp: norm, brands, conditions });
+  res.json({ message: 'تم تسجيل مورد اختبار', supplier: sup });
 });
 
 // العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
@@ -339,7 +364,12 @@ app.post('/api/webhook/reply', (req, res) => {
 function handleReply(from, text, item_id, res) {
   const normFrom = normalizePhone(from);
   const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(normFrom);
-  if (!supplier) return res.sendStatus(200);
+  if (!supplier) {
+    // تشخيص: رقم المورد لا يطابق أي مورد مسجّل (سبب شائع لعدم تسجيل الردود)
+    console.log(`[webhook] رد من رقم "${from}" (مطبّع: "${normFrom}") — لا يوجد مورد مسجّل بهذا الرقم. تم تجاهل الرد.`);
+    return res.json({ understood: false, reason: 'supplier_not_found', normalized: normFrom });
+  }
+  console.log(`[webhook] رد من المورد "${supplier.name}" (${normFrom}): "${(text||'').replace(/\n/g,' | ')}"`);
 
   const body = text || '';
   const multi = parseMultiReply(body);
@@ -402,8 +432,11 @@ function handleReply(from, text, item_id, res) {
   }
 
   if (!recorded.length) {
+    console.log(`[webhook] لم يُسجّل أي عرض من "${supplier.name}" — تعذّر فهم الأسعار.`);
     return res.json({ understood: false, hint: 'لم نتعرّف على سعر. أرسل: رقم القطعة=السعر (مثال: 15=220)' });
   }
+  console.log(`[webhook] سُجّل ${recorded.length} عرض من "${supplier.name}": ` +
+    recorded.map(r => `قطعة ${r.item_id}=${r.available ? r.price : 'لا'}`).join('، '));
   return res.json({ understood: true, recorded, any_ready: anyReady });
 }
 
