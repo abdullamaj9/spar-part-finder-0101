@@ -114,6 +114,20 @@ function requestStatus(requestId) {
   return { ready, seconds_left, items: states };
 }
 
+// كل القطع التي بُثّت لمورد معيّن وما زالت تجمع عروضًا (مرتّبة بترتيب البث)
+// تُستخدم لتوزيع ردود الأسعار المتعددة على القطع الصحيحة.
+function pendingItemsForSupplier(supplierWhatsapp) {
+  return db.prepare(`
+    SELECT DISTINCT ri.id, ri.part_name, b.id AS broadcast_id
+    FROM broadcasts b
+    JOIN suppliers s ON s.id = b.supplier_id
+    JOIN request_items ri ON ri.id = b.item_id
+    WHERE s.whatsapp = ?
+      AND ri.status IN ('collecting','open','ready')
+    ORDER BY b.id ASC
+  `).all(supplierWhatsapp);
+}
+
 // تسجيل عرض من مورد لقطعة
 function recordOffer({ item_id, supplier_id, price, available, reply_seconds }) {
   const info = db.prepare(`
@@ -274,5 +288,6 @@ function recordOfferFromReply({ supplier_id, item_id, available, price, reply_se
 module.exports = {
   createRequest, broadcastTargets, recordOffer, recordOfferFromReply,
   offersForItem, chooseWinners, computeSupplierFee, supplierBaskets,
-  computeDeadlineSeconds, startTimers, checkItemReady, requestStatus, offerCountForItem
+  computeDeadlineSeconds, startTimers, checkItemReady, requestStatus, offerCountForItem,
+  pendingItemsForSupplier
 };

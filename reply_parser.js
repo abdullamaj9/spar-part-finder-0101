@@ -22,6 +22,11 @@ function parseReply(text) {
   const lower = normalizeDigits(raw.toLowerCase());
 
   // 1) فحص عدم التوفر أولًا
+  // حالة خاصة: السطر كله "لا" أو "no" أو "x" (رد مختصر شائع لعدم التوفر)
+  const compact = lower.replace(/[\s.!،,-]/g, '');
+  if (['لا','no','x','✗','✘','×','-'].includes(compact)) {
+    return { ok: true, available: false, price: null };
+  }
   for (const kw of UNAVAILABLE) {
     if (lower.includes(kw)) return { ok: true, available: false, price: null };
   }
@@ -41,4 +46,29 @@ function parseReply(text) {
   return { ok: true, available: true, price };
 }
 
-module.exports = { parseReply, normalizeDigits };
+// تحليل رد متعدّد: يدعم صيغتين
+//  (أ) مربوط بالرقم:  "15=220" أو "15 : 220" أو "15-220"  (الأدقّ)
+//  (ب) أسطر بالترتيب: كل سطر سعر/رد واحد، يُوزَّع على القطع بترتيب البث
+// يرجّع: { keyed: [{item_id, ...parsed}], ordered: [parsed, parsed, ...] }
+function parseMultiReply(text) {
+  if (!text || !text.trim()) return { keyed: [], ordered: [] };
+  const lines = normalizeDigits(text).split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+  const keyed = [];
+  const ordered = [];
+  for (const line of lines) {
+    // صيغة "رقم = سعر" أو "رقم: سعر" أو "[رقم] سعر"
+    const m = line.match(/^\[?(\d{1,7})\]?\s*[=:\-،,]\s*(.+)$/);
+    if (m) {
+      const itemId = parseInt(m[1], 10);
+      const parsed = parseReply(m[2]);
+      if (parsed.ok) keyed.push({ item_id: itemId, ...parsed });
+      continue;
+    }
+    // سطر عادي (سعر أو "لا") — للتوزيع بالترتيب
+    const parsed = parseReply(line);
+    if (parsed.ok) ordered.push(parsed);
+  }
+  return { keyed, ordered };
+}
+
+module.exports = { parseReply, parseMultiReply, normalizeDigits };

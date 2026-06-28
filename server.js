@@ -137,7 +137,7 @@ app.post('/api/requests', async (req, res) => {
         try {
           await sendTemplateRequest(sup.whatsapp, {
             car: carDesc,
-            part: t.item.note ? `${t.item.part_name} (${t.item.note})` : t.item.part_name,
+            part: `[${t.item.id}] ` + (t.item.note ? `${t.item.part_name} (${t.item.note})` : t.item.part_name),
             type: t.item.part_condition,
             vin: vin,
           });
@@ -269,7 +269,7 @@ app.get('/api/admin/reports/:type', requireAdmin, (req, res) => {
 });
 
 // ===== استقبال ردود الموردين (Webhook) =====
-const { parseReply } = require('./reply_parser');
+const { parseReply, parseMultiReply } = require('./reply_parser');
 const { normalizePhone } = require('./phone');
 
 // تحقق Meta من الـ webhook (GET) — مطلوب لربط الرابط في Meta
@@ -313,9 +313,11 @@ app.post('/api/webhook/reply', (req, res) => {
         text = m[1] === 'avail' ? 'متوفر' : 'غير متوفر';
       }
     } else if (message.type === 'text') {
-      // رد نصي (سعر) — نربطه بآخر قطعة بُثّت لهذا المورد
+      // رد نصي (سعر/أسعار) — نمرّر النص كاملًا، و handleReply يوزّعه على القطع الصحيحة
+      // (يدعم: "15=220" متعدد الأسطر، أو أسطر أرقام بالترتيب)
       text = message.text.body;
       const normFrom = normalizePhone(from);
+      // نمرّر آخر قطعة كاحتياطي فقط (لحالة السعر الواحد بدون رقم)
       const lastReq = db.prepare(`
         SELECT b.item_id FROM broadcasts b
         JOIN suppliers s ON s.id = b.supplier_id
@@ -324,7 +326,8 @@ app.post('/api/webhook/reply', (req, res) => {
       itemId = lastReq?.item_id || null;
     }
 
-    if (from && itemId) return handleReply(from, text, itemId, res);
+    // للنص: نمرّر دائمًا (حتى لو itemId فاضي، handleReply يوزّع بالرقم/الترتيب)
+    if (from && (itemId || message.type === 'text')) return handleReply(from, text, itemId, res);
     return res.sendStatus(200);
   } catch (e) {
     console.error('webhook error:', e.message);
@@ -338,22 +341,70 @@ function handleReply(from, text, item_id, res) {
   const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(normFrom);
   if (!supplier) return res.sendStatus(200);
 
-  const parsed = parseReply(text || '');
-  if (!parsed.ok) return res.json({ understood: false });
+  const body = text || '';
+  const multi = parseMultiReply(body);
 
-  const item = db.prepare('SELECT created_at FROM request_items WHERE id = ?').get(item_id);
-  let replySeconds = 0;
-  if (item) {
-    const created = new Date(item.created_at + 'Z').getTime();
-    replySeconds = Math.max(0, Math.round((Date.now() - created) / 1000));
+  // حساب ثواني الرد لقطعة معيّنة
+  const replySecondsFor = (iid) => {
+    const it = db.prepare('SELECT created_at FROM request_items WHERE id = ?').get(iid);
+    if (!it) return 0;
+    const created = new Date(it.created_at + 'Z').getTime();
+    return Math.max(0, Math.round((Date.now() - created) / 1000));
+  };
+
+  const recorded = []; // {item_id, price, available}
+  let anyReady = false;
+
+  // الحالة (أ): ردود مربوطة بالرقم "15=220" — الأدقّ، نسجّل كلًا في قطعته
+  if (multi.keyed.length) {
+    for (const k of multi.keyed) {
+      // تأكد أن القطعة بُثّت فعلًا لهذا المورد (أمان)
+      const wasBroadcast = db.prepare(
+        'SELECT 1 FROM broadcasts WHERE item_id = ? AND supplier_id = ? LIMIT 1'
+      ).get(k.item_id, supplier.id);
+      if (!wasBroadcast) continue;
+      const r = requestsLib.recordOfferFromReply({
+        supplier_id: supplier.id, item_id: k.item_id,
+        available: k.available, price: k.price, reply_seconds: replySecondsFor(k.item_id),
+      });
+      recorded.push({ item_id: k.item_id, price: k.price, available: k.available });
+      if (r?.ready?.ready) anyReady = true;
+    }
   }
 
-  const r = requestsLib.recordOfferFromReply({
-    supplier_id: supplier.id, item_id,
-    available: parsed.available, price: parsed.price, reply_seconds: replySeconds,
-  });
-  return res.json({ understood: true, available: parsed.available, price: parsed.price,
-    item_ready: r?.ready?.ready || false });
+  // الحالة (ب): أسطر بالترتيب (220 / 334 / 450) — نوزّعها على القطع المبثوثة بالترتيب
+  // (تعمل فقط إن لم تكن هناك ردود مربوطة بالرقم، تفاديًا للازدواج)
+  if (!multi.keyed.length && multi.ordered.length) {
+    const pending = requestsLib.pendingItemsForSupplier(normFrom); // مرتّبة بترتيب البث
+    if (multi.ordered.length === 1 && item_id) {
+      // سعر واحد فقط + لدينا item_id محدّد (مثلًا من زر) → استخدمه مباشرة
+      const p = multi.ordered[0];
+      const r = requestsLib.recordOfferFromReply({
+        supplier_id: supplier.id, item_id,
+        available: p.available, price: p.price, reply_seconds: replySecondsFor(item_id),
+      });
+      recorded.push({ item_id, price: p.price, available: p.available });
+      if (r?.ready?.ready) anyReady = true;
+    } else {
+      // عدة أسعار → وزّعها على القطع المعلّقة بالترتيب (حتى أقصر القائمتين)
+      const n = Math.min(multi.ordered.length, pending.length);
+      for (let i = 0; i < n; i++) {
+        const p = multi.ordered[i];
+        const iid = pending[i].id;
+        const r = requestsLib.recordOfferFromReply({
+          supplier_id: supplier.id, item_id: iid,
+          available: p.available, price: p.price, reply_seconds: replySecondsFor(iid),
+        });
+        recorded.push({ item_id: iid, price: p.price, available: p.available });
+        if (r?.ready?.ready) anyReady = true;
+      }
+    }
+  }
+
+  if (!recorded.length) {
+    return res.json({ understood: false, hint: 'لم نتعرّف على سعر. أرسل: رقم القطعة=السعر (مثال: 15=220)' });
+  }
+  return res.json({ understood: true, recorded, any_ready: anyReady });
 }
 
 // ===== النسخ الاحتياطي (إدارة) =====
