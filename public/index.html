@@ -161,7 +161,7 @@
 </div>
 
 <script>
-let META = { brands: [], brandModels: {}, conditions: [], countdown: 90 };
+let META = { brands: [], brandModels: {}, conditions: [], partCategories: {}, categoryNames: [], countdown: 90 };
 let currentItemIds = [];
 
 async function loadMeta() {
@@ -190,11 +190,28 @@ function addItem() {
   div.className = 'item-block';
   div.id = 'item-' + id;
   const condOptions = META.conditions.map(c => `<option value="${c}">${c}</option>`).join('');
+  const catOptions = (META.categoryNames || []).map(c => `<option value="${c}">${c}</option>`).join('');
   div.innerHTML = `
     ${id > 1 ? `<button class="remove" onclick="document.getElementById('item-${id}').remove()">✕</button>` : ''}
     <div class="field">
-      <label>اسم القطعة</label>
-      <input type="text" class="part-name" placeholder="مثال: مساعدات أمامية">
+      <label>القسم</label>
+      <select class="part-category" onchange="fillParts(this)">
+        <option value="">— اختر القسم —</option>${catOptions}
+      </select>
+    </div>
+    <div class="field">
+      <label>القطعة</label>
+      <select class="part-select" onchange="onPartSelect(this)" disabled>
+        <option value="">— اختر القسم أولاً —</option>
+      </select>
+    </div>
+    <div class="field part-custom" style="display:none">
+      <label>اكتب اسم القطعة</label>
+      <input type="text" class="part-name-custom" placeholder="اسم القطعة">
+    </div>
+    <div class="field">
+      <label>توضيح (اختياري)</label>
+      <input type="text" class="part-note" placeholder="مثال: أمامي يمين، خلفي يسار...">
     </div>
     <div class="field">
       <label>النوع</label>
@@ -206,6 +223,27 @@ function addItem() {
       <img class="preview">
     </div>`;
   document.getElementById('itemsContainer').appendChild(div);
+}
+
+// يملأ قائمة القطع حسب القسم المختار
+function fillParts(sel) {
+  const block = sel.closest('.item-block');
+  const partSel = block.querySelector('.part-select');
+  const cat = sel.value;
+  const parts = (META.partCategories && META.partCategories[cat]) || [];
+  partSel.innerHTML = '<option value="">— اختر القطعة —</option>' +
+    parts.map(p => `<option value="${p}">${p}</option>`).join('') +
+    '<option value="__other__">أخرى (اكتبها يدويًا)</option>';
+  partSel.disabled = false;
+  // إخفاء خانة الكتابة اليدوية عند تغيير القسم
+  block.querySelector('.part-custom').style.display = 'none';
+}
+
+// عند اختيار "أخرى"، تظهر خانة الكتابة اليدوية
+function onPartSelect(sel) {
+  const block = sel.closest('.item-block');
+  const custom = block.querySelector('.part-custom');
+  custom.style.display = (sel.value === '__other__') ? 'block' : 'none';
 }
 
 function previewImg(input) {
@@ -224,16 +262,24 @@ async function submitRequest() {
 
   const items = [];
   document.querySelectorAll('.item-block').forEach(b => {
-    const name = b.querySelector('.part-name').value.trim();
-    if (!name) return;
+    // اسم القطعة: من القائمة، أو يدوي لو اختار "أخرى"
+    const sel = b.querySelector('.part-select');
+    let name = sel ? sel.value : '';
+    if (name === '__other__' || !name) {
+      const custom = b.querySelector('.part-name-custom');
+      name = custom ? custom.value.trim() : '';
+    }
+    if (!name) return; // تجاهل الصفوف الفارغة
+    const note = (b.querySelector('.part-note')?.value || '').trim();
     const img = b.querySelector('.preview');
     items.push({
       part_name: name,
       part_condition: b.querySelector('.part-condition').value,
+      note: note,
       image_url: img.dataset.b64 || '',
     });
   });
-  if (!items.length) { alert('أضف قطعة واحدة على الأقل'); return; }
+  if (!items.length) { alert('اختر قطعة واحدة على الأقل'); return; }
 
   const payload = {
     whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
@@ -286,31 +332,20 @@ function buildTips() {
 }
 
 async function checkOffersReady() {
-  // يوقف العداد مبكرًا فقط لو ردّ كل الموردين المبثوث لهم (عدالة للجميع)
-  // وإلا ننتظر الـ90 ثانية كاملة لجمع أكبر عدد من العروض
+  // تعتمد على نقطة /status الذكية في الخادم (تحسب: ردّ الجميع أو انتهاء المهلة)
   try {
-    const notified = window.suppliersNotified || 0;
-    if (notified === 0) return false; // لا موردين، ننتظر الوقت كاملًا
-    // نعدّ إجمالي العروض الواصلة عبر كل القطع
-    let totalOffers = 0;
-    for (const itemId of currentItemIds) {
-      const offers = await (await fetch('/api/items/' + itemId + '/offers')).json();
-      totalOffers += (offers ? offers.length : 0);
-    }
-    // نوقف فقط لو وصل عدد العروض = عدد الموردين (أي ردّوا كلهم)
-    return totalOffers >= notified;
-  } catch { return false; }
+    const st = await (await fetch('/api/requests/' + currentRequestId + '/status')).json();
+    return st; // { ready, seconds_left, items }
+  } catch { return null; }
 }
 
 function startCountdown() {
   document.getElementById('formStage').classList.add('hidden');
   document.getElementById('countdownStage').classList.remove('hidden');
-  let n = META.countdown || 90;
   const tips = buildTips();
   let tipIdx = 0;
   const counter = document.getElementById('counter');
   const tip = document.getElementById('tip');
-  counter.textContent = n;
   tip.textContent = tips[0];
 
   // تدوير النصائح كل 6 ثوانٍ
@@ -320,22 +355,48 @@ function startCountdown() {
     setTimeout(() => { tip.textContent = tips[tipIdx]; tip.style.opacity = 1; }, 300);
   }, 6000);
 
-  // التايمر الذكي: يفحص كل 5 ثوانٍ هل اكتملت العروض
-  const iv = setInterval(async () => {
-    n--; counter.textContent = n > 0 ? n : 0;
-    // كل 5 ثوانٍ، افحص هل وصلت العروض لكل القطع
-    if (n > 0 && n % 5 === 0) {
-      const ready = await checkOffersReady();
-      if (ready) { // وصلت كل العروض — لا داعي للانتظار
+  // العداد يعتمد على حالة الخادم: يعرض الوقت المتبقي الفعلي،
+  // ويتوقف فورًا لحظة ما يصبح ready=true (ردّ الجميع أو انتهت المهلة).
+  let lastShown = META.countdown || 90;
+  counter.textContent = lastShown;
+
+  async function poll() {
+    const st = await checkOffersReady();
+    if (st) {
+      if (st.ready) { // جاهز — اعرض النتائج فورًا
         clearInterval(iv); clearInterval(tipIv);
         counter.textContent = '✓';
-        tip.textContent = '🎉 وصلت كل العروض! جارٍ العرض...';
+        tip.textContent = '🎉 وصلت العروض! جارٍ العرض...';
         setTimeout(showResults, 800);
         return;
       }
+      // حدّث العداد بالوقت المتبقي الحقيقي من الخادم
+      if (typeof st.seconds_left === 'number') {
+        lastShown = st.seconds_left;
+        counter.textContent = lastShown > 0 ? lastShown : 0;
+      }
     }
-    if (n <= 0) { clearInterval(iv); clearInterval(tipIv); showResults(); }
+  }
+
+  // عدّ تنازلي محلي سلس كل ثانية + مزامنة مع الخادم كل 4 ثوانٍ
+  let tick = 0;
+  const iv = setInterval(async () => {
+    tick++;
+    lastShown = Math.max(0, lastShown - 1);
+    counter.textContent = lastShown;
+    if (tick % 4 === 0 || lastShown <= 0) {
+      await poll();
+    }
+    if (lastShown <= 0) {
+      // انتهى الوقت محليًا — تحقق نهائي ثم اعرض
+      const st = await checkOffersReady();
+      clearInterval(iv); clearInterval(tipIv);
+      showResults();
+    }
   }, 1000);
+
+  // فحص مبكر فوري (لو ردّ الجميع بسرعة)
+  poll();
 }
 
 let currentRequestId = null;
