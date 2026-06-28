@@ -11,12 +11,12 @@ function createRequest({ customer_id, brand, model, year, vin, items }) {
   const requestId = reqInfo.lastInsertRowid;
 
   const itemStmt = db.prepare(`
-    INSERT INTO request_items (request_id, part_name, part_condition, image_url, status)
-    VALUES (?, ?, ?, ?, 'collecting')
+    INSERT INTO request_items (request_id, part_name, part_condition, image_url, note, status)
+    VALUES (?, ?, ?, ?, ?, 'collecting')
   `);
   const itemIds = [];
   for (const it of items) {
-    const info = itemStmt.run(requestId, it.part_name, it.part_condition, it.image_url || '');
+    const info = itemStmt.run(requestId, it.part_name, it.part_condition, it.image_url || '', it.note || '');
     itemIds.push(info.lastInsertRowid);
   }
   return { requestId, itemIds };

@@ -54,6 +54,7 @@ db.exec(`
     winner_supplier_id INTEGER,
     deadline TEXT DEFAULT '',        -- موعد انتهاء مهلة التسعير (ISO) — يُحسب لحظة البث
     expected_count INTEGER DEFAULT 0,-- عدد الموردين الذين أُرسل لهم الطلب (المتوقَّع ردهم)
+    note TEXT DEFAULT '',            -- توضيح اختياري للقطعة (يمين/يسار، أمامي/خلفي...)
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (request_id) REFERENCES requests(id)
   );
@@ -136,6 +137,7 @@ function ensureColumn(table, column, definition) {
 }
 ensureColumn('request_items', 'deadline', "TEXT DEFAULT ''");
 ensureColumn('request_items', 'expected_count', 'INTEGER DEFAULT 0');
+ensureColumn('request_items', 'note', "TEXT DEFAULT ''");
 const DEFAULT_SETTINGS = {
   free_leads: '2',              // أول طلبين فائزين مجانًا لكل مورد
   lead_fee: '5',               // رسوم الـ Lead للقطعة الأولى بالدرهم

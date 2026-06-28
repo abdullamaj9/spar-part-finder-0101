@@ -8,6 +8,7 @@ const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
 const { sendText, sendTemplateRequest, sendDealWon, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
 const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
+const { PART_CATEGORIES, CATEGORY_NAMES } = require('./parts');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -51,6 +52,8 @@ app.get('/api/meta', (req, res) => {
     brandsByOrigin: byOrigin,
     origins: ORIGINS,
     conditions: CONDITIONS,
+    partCategories: PART_CATEGORIES,
+    categoryNames: CATEGORY_NAMES,
     countdown: parseInt(getSetting('countdown_seconds'), 10),
   });
 });
@@ -134,7 +137,7 @@ app.post('/api/requests', async (req, res) => {
         try {
           await sendTemplateRequest(sup.whatsapp, {
             car: carDesc,
-            part: t.item.part_name,
+            part: t.item.note ? `${t.item.part_name} (${t.item.note})` : t.item.part_name,
             type: t.item.part_condition,
             vin: vin,
           });
