@@ -183,7 +183,7 @@ function repQuery() {
 
 async function loadReports() {
   const q = repQuery();
-  const types = [['brands','أكثر الماركات طلبًا'],['parts','أكثر القطع طلبًا'],['conditions','توزيع نوع القطعة'],['customers','أنشط العملاء'],['suppliers','أداء الموردين'],['funnel','قمع التحويل'],['revenue','الإيرادات']];
+  const types = [['brands','أكثر الماركات طلبًا'],['parts','أكثر القطع طلبًا'],['conditions','توزيع نوع القطعة'],['customers','أنشط العملاء'],['suppliers','أداء الموردين'],['funnel','قمع التحويل'],['revenue','الإيرادات'],['parts-winners','القطع والفائزون']];
   const body = document.getElementById('reportsBody');
   body.innerHTML = '';
   for (const [type, title] of types) {
