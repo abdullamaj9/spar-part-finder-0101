@@ -311,7 +311,24 @@ app.get('/api/webhook/reply', (req, res) => {
 
 // استقبال ردود الموردين من Meta (POST)
 // يدعم: صيغة Meta الحقيقية (أزرار + نص) + الصيغة المبسّطة للاختبار
+// ===== تشخيص: التقاط آخر طلبات webhook الخام (للفحص عبر رابط) =====
+const webhookLog = [];
+function captureWebhook(req) {
+  webhookLog.unshift({
+    time: new Date().toISOString(),
+    method: req.method,
+    body: req.body,
+    query: req.query,
+  });
+  if (webhookLog.length > 20) webhookLog.pop();
+}
+// رابط لعرض آخر طلبات webhook وصلت فعليًا
+app.get('/api/debug/webhook-log', (req, res) => {
+  res.json({ count: webhookLog.length, entries: webhookLog });
+});
+
 app.post('/api/webhook/reply', (req, res) => {
+  captureWebhook(req); // سجّل الطلب الخام للتشخيص
   // Meta تتطلب رد 200 سريعًا، نعالج ثم نرد
   try {
     // الصيغة المبسّطة للاختبار: { from, text, item_id }
