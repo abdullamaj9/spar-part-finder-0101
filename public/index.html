@@ -172,6 +172,15 @@
   </div>
 </div>
 
+<!-- نافذة تنبيه مخصّصة (بديل alert بدون اسم الموقع) -->
+<div id="carlyToast" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(15,42,74,.45);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,.25)">
+    <div id="carlyToastIcon" style="font-size:34px;margin-bottom:10px">⚠️</div>
+    <p id="carlyToastMsg" style="color:var(--navy);font-size:16px;font-weight:600;margin:0 0 18px;line-height:1.5"></p>
+    <button onclick="hideToast()" id="carlyToastBtn" style="background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 32px;font-size:15px;font-weight:700;cursor:pointer">حسناً</button>
+  </div>
+</div>
+
 <script>
 // ===== نظام اللغة (عربي/إنجليزي) =====
 const I18N = {
@@ -234,6 +243,7 @@ const I18N = {
   ofParts:         { ar: 'من', en: 'of' },
   partsUnit:       { ar: 'قطعة', en: 'parts' },
   currency:        { ar: 'درهم', en: 'AED' },
+  ok:              { ar: 'حسناً', en: 'OK' },
   noOffersYet:     { ar: 'لم تصل عروض بعد.', en: 'No offers yet.' },
   noOffers:        { ar: 'لا عروض', en: 'No offers' },
   partLabel:       { ar: 'القطعة', en: 'Part' },
@@ -268,6 +278,27 @@ function setLang(lang) {
 }
 
 function toggleLang() { setLang(LANG === 'ar' ? 'en' : 'ar'); }
+
+// نافذة تنبيه مخصّصة بديلة عن alert (بدون اسم الموقع)
+// type: 'warn' (كهرماني — تنبيه ودّي) | 'error' (أحمر — خطأ فعلي)
+function showToast(message, type) {
+  const box = document.getElementById('carlyToast');
+  if (!box) { alert(message); return; }
+  const isErr = type === 'error';
+  const icon = isErr ? '⛔' : '⚠️';
+  const color = isErr ? '#C0392B' : '#E8920C'; // أحمر للخطأ، كهرماني للتنبيه
+  document.getElementById('carlyToastMsg').textContent = message;
+  const ic = document.getElementById('carlyToastIcon');
+  ic.textContent = icon;
+  const btn = document.getElementById('carlyToastBtn');
+  btn.textContent = t('ok');
+  btn.style.background = color;
+  box.style.display = 'flex';
+}
+function hideToast() {
+  const box = document.getElementById('carlyToast');
+  if (box) box.style.display = 'none';
+}
 
 function refreshDynamicTexts() {
   if (META && META.brandsI18n && typeof fillBrandsSelect === 'function') fillBrandsSelect();
@@ -363,7 +394,7 @@ function fillBrandsSelect() {
 async function openOrderFromLink(orderNumber) {
   try {
     const data = await (await fetch('/api/orders/' + encodeURIComponent(orderNumber))).json();
-    if (!data.found) { alert(t('alertNotFound')); return; }
+    if (!data.found) { showToast(t('alertNotFound'), 'error'); return; }
     // لو منتهي الصلاحية → صفحة "انتهت الصلاحية"
     if (data.validity && data.validity.expired) {
       showExpiredPage(data.order_number);
@@ -386,7 +417,7 @@ async function openOrderFromLink(orderNumber) {
     document.getElementById('countdownStage').classList.add('hidden');
     showResults();
   } catch (e) {
-    alert(t('alertOpenFail'));
+    showToast(t('alertOpenFail'), 'error');
   }
 }
 
@@ -621,7 +652,7 @@ function previewImg(input) {
 async function submitRequest() {
   const whatsapp = document.getElementById('whatsapp').value.trim();
   const brand = document.getElementById('brand').value;
-  if (!whatsapp || !brand) { alert(t('alertEnterPhone')); return; }
+  if (!whatsapp || !brand) { showToast(t('alertEnterPhone')); return; }
 
   const items = [];
   const incompleteParts = []; // أرقام القطع الناقصة (لتنبيه دقيق)
@@ -657,10 +688,10 @@ async function submitRequest() {
     const msg = LANG === 'en'
       ? `Part # ${list} is incomplete.\n\nType the part name and choose it from the list, or tap "➕ Add" to send it as typed.\nThen submit the request.`
       : `القطعة رقم ${list} غير مكتملة.\n\nاكتب اسم القطعة واختَرها من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبتها.\nثم أرسل الطلب.`;
-    alert(msg);
+    showToast(msg);
     return;
   }
-  if (!items.length) { alert(t('alertChoosePart')); return; }
+  if (!items.length) { showToast(t('alertChoosePart')); return; }
 
   const payload = {
     whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
@@ -681,7 +712,7 @@ async function submitRequest() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (data.error) { alert(data.error); backToForm(); return; }
+    if (data.error) { showToast(data.error, 'error'); backToForm(); return; }
     currentItemIds = data.itemIds;
     currentRequestId = data.requestId;
     window.suppliersNotified = data.suppliers_notified || 0;
@@ -692,7 +723,7 @@ async function submitRequest() {
       el.style.display = 'inline-block';
     }
   } catch (e) {
-    alert(t('alertSendFail')); backToForm();
+    showToast(t('alertSendFail'), 'error'); backToForm();
   }
 }
 
@@ -889,7 +920,7 @@ function pickItem(itemId, offerId) { itemChoices[itemId] = offerId; renderItems(
 async function confirmChoice() {
   let choices = [];
   if (selectedMode === 'basket') {
-    if (!basketChoice) { alert(t('alertChooseSupplier')); return; }
+    if (!basketChoice) { showToast(t('alertChooseSupplier')); return; }
     // كل قطع المورد المختار من عروضه
     for (const itemId of currentItemIds) {
       const o = (itemOffers[itemId]||[]).find(of => of.supplier_id === basketChoice);
@@ -897,13 +928,13 @@ async function confirmChoice() {
     }
   } else {
     choices = Object.entries(itemChoices).map(([item_id, offer_id]) => ({ item_id: +item_id, offer_id }));
-    if (!choices.length) { alert(t('alertChooseOffer')); return; }
+    if (!choices.length) { showToast(t('alertChooseOffer')); return; }
   }
   const res = await fetch('/api/requests/choose', {
     method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ choices }),
   });
   const data = await res.json();
-  if (data.error) { alert(data.error); return; }
+  if (data.error) { showToast(data.error, 'error'); return; }
   const names = data.winners.map(w => `${w.name} (${w.items_won} ${t('partsUnit')})`).join(LANG === 'en' ? ', ' : '، ');
   const orderLine = data.order_number
     ? `<p style="margin-top:6px;color:var(--navy);font-weight:600">${t('yourOrderNo')} ${data.order_number}</p>` : '';
