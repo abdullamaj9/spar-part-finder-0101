@@ -183,6 +183,56 @@ async function loadMeta() {
     const o = document.createElement('option'); o.value = b; o.textContent = b; bsel.appendChild(o);
   });
   addItem();
+  // لو الرابط فيه ?order=CARLY-21 → افتح صفحة نتائج الطلب مباشرة
+  const params = new URLSearchParams(location.search);
+  const order = params.get('order');
+  if (order) openOrderFromLink(order);
+}
+
+// فتح طلب موجود عبر رقمه (من رابط الواتساب)
+async function openOrderFromLink(orderNumber) {
+  try {
+    const data = await (await fetch('/api/orders/' + encodeURIComponent(orderNumber))).json();
+    if (!data.found) { alert('الطلب غير موجود'); return; }
+    // لو منتهي الصلاحية → صفحة "انتهت الصلاحية"
+    if (data.validity && data.validity.expired) {
+      showExpiredPage(data.order_number);
+      return;
+    }
+    // لو محسوم مسبقًا → رسالة أنه تم
+    if (data.validity && data.validity.chosen) {
+      document.getElementById('formStage').classList.add('hidden');
+      document.getElementById('resultsStage').classList.remove('hidden');
+      document.getElementById('resultsStage').innerHTML =
+        `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد هذا الطلب مسبقًا ✓</h2>
+         <p style="margin-top:10px;color:var(--navy);font-weight:600">📋 ${data.order_number}</p>
+         <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 طلب قطعة جديدة</button></div>`;
+      return;
+    }
+    // غير ذلك: اعرض العروض للاختيار
+    currentRequestId = data.request.id;
+    currentItemIds = data.items.map(it => it.id);
+    document.getElementById('formStage').classList.add('hidden');
+    document.getElementById('countdownStage').classList.add('hidden');
+    showResults();
+  } catch (e) {
+    alert('تعذّر فتح الطلب، حاول مجددًا');
+  }
+}
+
+// صفحة انتهاء صلاحية العروض
+function showExpiredPage(orderNo) {
+  document.getElementById('formStage').classList.add('hidden');
+  document.getElementById('countdownStage').classList.add('hidden');
+  const stage = document.getElementById('resultsStage');
+  stage.classList.remove('hidden');
+  stage.innerHTML =
+    `<div class="card" style="text-align:center">
+       <h2 style="color:#c0392b">انتهت صلاحية العروض ⏳</h2>
+       <p style="margin-top:10px">عذرًا، انتهت مهلة اختيار العروض لطلبك ${orderNo || ''}.</p>
+       <p class="muted" style="margin-top:6px">الأسعار تتغيّر بسرعة، لذا نطلب منك إرسال طلب جديد للحصول على أحدث العروض.</p>
+       <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 إرسال طلب جديد</button>
+     </div>`;
 }
 
 document.getElementById('brand').addEventListener('change', function() {
@@ -624,10 +674,33 @@ async function confirmChoice() {
   const data = await res.json();
   if (data.error) { alert(data.error); return; }
   const names = data.winners.map(w => `${w.name} (${w.items_won} قطعة)`).join('، ');
+  const orderLine = data.order_number
+    ? `<p style="margin-top:6px;color:var(--navy);font-weight:600">📋 رقم طلبك: ${data.order_number}</p>` : '';
   document.getElementById('resultsStage').innerHTML =
     `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد طلبك ✓</h2>
      <p style="margin-top:10px">سيتواصل معك: ${names}</p>
-     <p class="muted" style="margin-top:8px">ستصلك بياناتهم عبر الواتساب</p></div>`;
+     ${orderLine}
+     <p class="muted" style="margin-top:8px">ستصلك بياناتهم عبر الواتساب</p>
+     <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 طلب قطعة جديدة</button>
+     </div>`;
+}
+
+// إعادة الصفحة لبدايتها لطلب جديد
+function resetToStart() {
+  // نخفي كل المراحل ونعيد بناء النموذج نظيفًا
+  document.getElementById('resultsStage').classList.add('hidden');
+  document.getElementById('countdownStage').classList.add('hidden');
+  document.getElementById('formStage').classList.remove('hidden');
+  // تفريغ القطع وإعادة قطعة واحدة فارغة
+  itemCounter = 0;
+  document.getElementById('itemsContainer').innerHTML = '';
+  addItem();
+  // تفريغ بيانات السيارة
+  ['model','year','vin'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  currentRequestId = null; currentItemIds = []; itemChoices = {}; basketChoice = null;
+  // إزالة ?order= من الرابط حتى لا يُعاد فتح نفس الطلب
+  if (location.search) history.replaceState(null, '', location.pathname);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 loadMeta();
