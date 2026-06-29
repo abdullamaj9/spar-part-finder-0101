@@ -192,22 +192,25 @@ function addItem() {
   const condOptions = META.conditions.map(c => `<option value="${c}">${c}</option>`).join('');
   const catOptions = (META.categoryNames || []).map(c => `<option value="${c}">${c}</option>`).join('');
   div.innerHTML = `
-    ${id > 1 ? `<button class="remove" onclick="document.getElementById('item-${id}').remove()">✕</button>` : ''}
+    <div class="item-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 class="item-title" style="color:var(--navy);font-size:15px;margin:0">القطعة رقم ${id}</h3>
+      ${id > 1 ? `<button class="remove" onclick="removeItem('item-${id}')" style="position:static">✕ حذف</button>` : ''}
+    </div>
     <div class="field">
       <label>القسم</label>
       <select class="part-category" onchange="fillParts(this)">
         <option value="">— اختر القسم —</option>${catOptions}
       </select>
     </div>
-    <div class="field">
+    <div class="field" style="position:relative">
       <label>القطعة</label>
-      <select class="part-select" onchange="onPartSelect(this)" disabled>
-        <option value="">— اختر القسم أولاً —</option>
-      </select>
-    </div>
-    <div class="field part-custom" style="display:none">
-      <label>اكتب اسم القطعة</label>
-      <input type="text" class="part-name-custom" placeholder="اسم القطعة">
+      <input type="text" class="part-search" autocomplete="off" disabled
+             placeholder="اختر القسم أولاً"
+             oninput="onPartSearch(this)" onfocus="onPartSearch(this)"
+             onblur="hideSuggestions(this)">
+      <input type="hidden" class="part-value">
+      <div class="part-suggestions" style="display:none;position:absolute;z-index:20;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1);margin-top:2px"></div>
+      <small class="part-hint" style="display:none;color:#888;margin-top:4px"></small>
     </div>
     <div class="field">
       <label>توضيح (اختياري)</label>
@@ -223,27 +226,112 @@ function addItem() {
       <img class="preview">
     </div>`;
   document.getElementById('itemsContainer').appendChild(div);
+  renumberItems();
 }
 
-// يملأ قائمة القطع حسب القسم المختار
+// حذف قطعة ثم إعادة ترقيم العناوين (القطعة رقم 1، 2، 3...)
+function removeItem(blockId) {
+  const el = document.getElementById(blockId);
+  if (el) el.remove();
+  renumberItems();
+}
+
+// تُعيد ترقيم عناوين القطع حسب ترتيبها الحالي
+function renumberItems() {
+  const blocks = document.querySelectorAll('#itemsContainer .item-block');
+  blocks.forEach((b, i) => {
+    const title = b.querySelector('.item-title');
+    if (title) title.textContent = 'القطعة رقم ' + (i + 1);
+  });
+}
+// عند اختيار القسم: نفعّل خانة بحث القطعة ونخزّن قطع القسم عليها
 function fillParts(sel) {
   const block = sel.closest('.item-block');
-  const partSel = block.querySelector('.part-select');
+  const search = block.querySelector('.part-search');
   const cat = sel.value;
   const parts = (META.partCategories && META.partCategories[cat]) || [];
-  partSel.innerHTML = '<option value="">— اختر القطعة —</option>' +
-    parts.map(p => `<option value="${p}">${p}</option>`).join('') +
-    '<option value="__other__">أخرى (اكتبها يدويًا)</option>';
-  partSel.disabled = false;
-  // إخفاء خانة الكتابة اليدوية عند تغيير القسم
-  block.querySelector('.part-custom').style.display = 'none';
+  search._parts = parts;          // نخزّن قطع القسم على العنصر
+  search.disabled = !cat;
+  search.value = '';
+  block.querySelector('.part-value').value = '';
+  search.placeholder = cat ? 'اكتب أو اختر القطعة...' : 'اختر القسم أولاً';
+  hideSuggestions(search);
+  block.querySelector('.part-hint').style.display = 'none';
 }
 
-// عند اختيار "أخرى"، تظهر خانة الكتابة اليدوية
-function onPartSelect(sel) {
-  const block = sel.closest('.item-block');
-  const custom = block.querySelector('.part-custom');
-  custom.style.display = (sel.value === '__other__') ? 'block' : 'none';
+// بحث/عرض الاقتراحات أثناء الكتابة
+function onPartSearch(input) {
+  const block = input.closest('.item-block');
+  const box = block.querySelector('.part-suggestions');
+  const hint = block.querySelector('.part-hint');
+  const hidden = block.querySelector('.part-value');
+  const parts = input._parts || [];
+  const q = input.value.trim();
+
+  // أي تعديل يدوي يُلغي الاختيار المخزّن حتى يُعاد تأكيده
+  hidden.value = '';
+
+  // فلترة القطع حسب النص (يطابق أي جزء)
+  const matches = q ? parts.filter(p => p.includes(q)) : parts;
+
+  let html = '';
+  if (matches.length) {
+    html = matches.map(p =>
+      `<div class="sug-item" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
+            onmousedown="pickPart(this,'${p.replace(/'/g,"\\'")}')">${p}</div>`
+    ).join('');
+  }
+  // لو فيه نص مكتوب وما يطابق أي قطعة تمامًا → خيار "إضافة ما كتبه"
+  const exact = parts.some(p => p === q);
+  if (q && !exact) {
+    html += `<div class="sug-item sug-add" style="padding:10px 12px;cursor:pointer;background:#eef6ff;font-weight:600;color:var(--navy)"
+                  onmousedown="pickCustom(this,'${q.replace(/'/g,"\\'")}')">➕ إضافة "${q}" كقطعة جديدة</div>`;
+  }
+
+  if (html) { box.innerHTML = html; box.style.display = 'block'; }
+  else { box.style.display = 'none'; }
+  hint.style.display = 'none';
+}
+
+// اختيار قطعة من القائمة
+function pickPart(el, name) {
+  const block = el.closest('.item-block');
+  block.querySelector('.part-search').value = name;
+  block.querySelector('.part-value').value = name;
+  const box = block.querySelector('.part-suggestions');
+  box.style.display = 'none';
+  const hint = block.querySelector('.part-hint');
+  hint.style.display = 'none';
+}
+
+// إضافة قطعة كتبها العميل (غير موجودة في القائمة)
+function pickCustom(el, name) {
+  const block = el.closest('.item-block');
+  block.querySelector('.part-search').value = name;
+  block.querySelector('.part-value').value = name;
+  const box = block.querySelector('.part-suggestions');
+  box.style.display = 'none';
+  const hint = block.querySelector('.part-hint');
+  hint.textContent = '✓ ستُرسل القطعة كما كتبتها';
+  hint.style.color = '#2a8a4a';
+  hint.style.display = 'block';
+}
+
+// إخفاء الاقتراحات (مع تأخير ليُسجَّل النقر) + تلميح لو نسي يؤكّد
+function hideSuggestions(input) {
+  const block = input.closest('.item-block');
+  const box = block.querySelector('.part-suggestions');
+  setTimeout(() => { if (box) box.style.display = 'none'; }, 150);
+  setTimeout(() => {
+    const hidden = block.querySelector('.part-value');
+    const search = block.querySelector('.part-search');
+    const hint = block.querySelector('.part-hint');
+    if (search.value.trim() && !hidden.value) {
+      hint.textContent = '⚠️ اختر قطعة من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبت';
+      hint.style.color = '#c0392b';
+      hint.style.display = 'block';
+    }
+  }, 250);
 }
 
 function previewImg(input) {
@@ -261,15 +349,23 @@ async function submitRequest() {
   if (!whatsapp || !brand) { alert('أدخل رقمك واختر الشركة'); return; }
 
   const items = [];
-  document.querySelectorAll('.item-block').forEach(b => {
-    // اسم القطعة: من القائمة، أو يدوي لو اختار "أخرى"
-    const sel = b.querySelector('.part-select');
-    let name = sel ? sel.value : '';
-    if (name === '__other__' || !name) {
-      const custom = b.querySelector('.part-name-custom');
-      name = custom ? custom.value.trim() : '';
+  const incompleteParts = []; // أرقام القطع الناقصة (لتنبيه دقيق)
+  document.querySelectorAll('.item-block').forEach((b, idx) => {
+    const partNum = idx + 1;
+    // اسم القطعة المؤكّدة (من اختيار قائمة أو إضافة يدوية)
+    let name = (b.querySelector('.part-value')?.value || '').trim();
+    // احتياط: لو كتب نصًا في خانة البحث ولم يؤكّده، نعتبره اسم القطعة
+    if (!name) {
+      const typed = (b.querySelector('.part-search')?.value || '').trim();
+      if (typed) name = typed;
     }
-    if (!name) return; // تجاهل الصفوف الفارغة
+    const cat = b.querySelector('.part-category');
+    const hasCategory = cat && cat.value;
+    // قطعة ناقصة: اختار قسمًا لكن بلا اسم قطعة
+    if (!name) {
+      if (hasCategory) incompleteParts.push(partNum);
+      return;
+    }
     const note = (b.querySelector('.part-note')?.value || '').trim();
     const img = b.querySelector('.preview');
     items.push({
@@ -279,7 +375,16 @@ async function submitRequest() {
       image_url: img.dataset.b64 || '',
     });
   });
-  if (!items.length) { alert('اختر قطعة واحدة على الأقل'); return; }
+
+  // تحقق صارم: لو فيه قطعة ناقصة، امنع الإرسال ووجّه العميل بدقة
+  if (incompleteParts.length > 0) {
+    const list = incompleteParts.join('، ');
+    alert(`القطعة رقم ${list} غير مكتملة.\n\n` +
+      `اكتب اسم القطعة واختَرها من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبتها.\n` +
+      `ثم أرسل الطلب.`);
+    return; // نمنع الإرسال حتى يكمل
+  }
+  if (!items.length) { alert('اختر قطعة واحدة على الأقل: حدّد القسم ثم القطعة.'); return; }
 
   const payload = {
     whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
@@ -288,16 +393,31 @@ async function submitRequest() {
     vin: document.getElementById('vin').value.trim(), items,
   };
 
-  const res = await fetch('/api/requests', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (data.error) { alert(data.error); return; }
-  currentItemIds = data.itemIds;
-  currentRequestId = data.requestId;
-  window.requestedParts = items.map(i => i.part_name); // لنصائح الانتظار
-  window.suppliersNotified = data.suppliers_notified || 0; // عدد الموردين المبثوث لهم
+  // افتح صفحة العداد فورًا (لا ننتظر بثّ السيرفر للموردين) — تجربة أسرع للعميل
+  window.requestedParts = items.map(i => i.part_name);
+  currentRequestId = null;
+  currentItemIds = [];
   startCountdown();
+
+  // أرسل الطلب في الخلفية؛ نحدّث المعرّفات عند وصول الرد
+  try {
+    const res = await fetch('/api/requests', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); backToForm(); return; }
+    currentItemIds = data.itemIds;
+    currentRequestId = data.requestId;
+    window.suppliersNotified = data.suppliers_notified || 0;
+  } catch (e) {
+    alert('تعذّر إرسال الطلب، حاول مجددًا'); backToForm();
+  }
+}
+
+// إرجاع الواجهة لصفحة النموذج (عند فشل الإرسال)
+function backToForm() {
+  document.getElementById('countdownStage').classList.add('hidden');
+  document.getElementById('formStage').classList.remove('hidden');
 }
 
 // قاعدة نصائح حسب نوع القطعة (مفتاح: كلمة في اسم القطعة)
@@ -333,6 +453,7 @@ function buildTips() {
 
 async function checkOffersReady() {
   // تعتمد على نقطة /status الذكية في الخادم (تحسب: ردّ الجميع أو انتهاء المهلة)
+  if (!currentRequestId) return null; // الطلب لم يُسجّل بعد (البثّ في الخلفية)
   try {
     const st = await (await fetch('/api/requests/' + currentRequestId + '/status')).json();
     return st; // { ready, seconds_left, items }
