@@ -271,6 +271,9 @@ function toggleLang() { setLang(LANG === 'ar' ? 'en' : 'ar'); }
 
 function refreshDynamicTexts() {
   if (META && META.brandsI18n && typeof fillBrandsSelect === 'function') fillBrandsSelect();
+  // إعادة تعبئة الموديلات (لتحديث خيار "اختر...")
+  const bsel = document.getElementById('brand');
+  if (bsel && bsel.value && typeof fillModels === 'function') fillModels(bsel.value);
   // ترجمة عناصر القطع الموجودة دون مسح إدخالات المستخدم
   document.querySelectorAll('#itemsContainer .item-block').forEach(b => {
     // عناوين الحقول (labels بالترتيب: القسم، القطعة، التوضيح، النوع، الصورة)
@@ -403,12 +406,30 @@ function showExpiredPage(orderNo) {
 }
 
 document.getElementById('brand').addEventListener('change', function() {
-  const msel = document.getElementById('model');
-  msel.innerHTML = '<option value="">اختر...</option>';
-  (META.brandModels[this.value] || []).forEach(m => {
-    const o = document.createElement('option'); o.value = m; o.textContent = m; msel.appendChild(o);
-  });
+  fillModels(this.value);
 });
+
+// تعبئة قائمة الموديلات لماركة معيّنة (تُعرض حسب اللغة، القيمة تبقى عربية)
+function fillModels(brandAr) {
+  const msel = document.getElementById('model');
+  if (!msel) return;
+  const cur = msel.value;
+  msel.innerHTML = `<option value="">${t('choose')}</option>`;
+  // نجلب الموديلات ثنائية اللغة من brandsI18n إن توفّرت
+  let models = [];
+  if (META.brandsI18n) {
+    const b = META.brandsI18n.find(x => x.ar === brandAr);
+    models = b ? (b.modelsI18n || b.models.map(m => ({ ar: m, en: m }))) : [];
+  } else {
+    models = (META.brandModels[brandAr] || []).map(m => ({ ar: m, en: m }));
+  }
+  models.forEach(m => {
+    const ar = m.ar || m;
+    const label = LANG === 'en' ? (m.en || ar) : ar;
+    const o = document.createElement('option'); o.value = ar; o.textContent = label; msel.appendChild(o);
+  });
+  if (cur) msel.value = cur;
+}
 
 let itemCounter = 0;
 function addItem() {
