@@ -84,13 +84,51 @@ const CONDITION_EN = {
   'جديد أصلي': 'Genuine new', 'جديد تجاري': 'Aftermarket new', 'مستعمل': 'Used',
 };
 
-// نسخة ماركات ثنائية اللغة للواجهة: [{ ar, en, origin, originEn, models }]
+// ترجمة الموديلات (عربي → إنجليزي). الموديلات اللاتينية أصلًا (RAV4, X5...) تبقى كما هي.
+const MODEL_EN = {
+  'كامري':'Camry','كورولا':'Corolla','لاندكروزر':'Land Cruiser','برادو':'Prado','هايلكس':'Hilux','يارس':'Yaris','افالون':'Avalon','فورتشنر':'Fortuner','إنوفا':'Innova',
+  'باترول':'Patrol','التيما':'Altima','مكسيما':'Maxima','صني':'Sunny','اكس تريل':'X-Trail','نافارا':'Navara','كيكس':'Kicks','باثفايندر':'Pathfinder','تيدا':'Tiida',
+  'أكورد':'Accord','سيفيك':'Civic','بايلوت':'Pilot','أوديسي':'Odyssey',
+  'باجيرو':'Pajero','لانسر':'Lancer','مونتيرو':'Montero','أوتلندر':'Outlander',
+  'مازدا 3':'Mazda 3','مازدا 6':'Mazda 6',
+  'جيمني':'Jimny','سويفت':'Swift','فيتارا':'Vitara','بالينو':'Baleno',
+  'إلنترا':'Elantra','سوناتا':'Sonata','توسان':'Tucson','سنتافي':'Santa Fe','أكسنت':'Accent','باليسيد':'Palisade','كريتا':'Creta',
+  'سبورتاج':'Sportage','سورينتو':'Sorento','أوبتيما':'Optima','سيراتو':'Cerato','كرنفال':'Carnival','سيلتوس':'Seltos','تيلورايد':'Telluride',
+  'إكسبلورر':'Explorer','إكسبيديشن':'Expedition','موستانج':'Mustang','إيدج':'Edge','رينجر':'Ranger','تورس':'Taurus',
+  'تاهو':'Tahoe','سوبربان':'Suburban','ماليبو':'Malibu','كامارو':'Camaro','سيلفرادو':'Silverado','ترافيرس':'Traverse','إمبالا':'Impala',
+  'يوكن':'Yukon','سييرا':'Sierra','أكاديا':'Acadia','تيرين':'Terrain',
+  'تشارجر':'Charger','تشالنجر':'Challenger','دورانجو':'Durango','رام':'Ram',
+  'اسكاليد':'Escalade',
+  'جراند شيروكي':'Grand Cherokee','رانجلر':'Wrangler','شيروكي':'Cherokee','كومباس':'Compass',
+  'جولف':'Golf','باسات':'Passat','تيجوان':'Tiguan','طوارق':'Touareg',
+  'كايين':'Cayenne','ماكان':'Macan','باناميرا':'Panamera',
+  'رينج روفر':'Range Rover','ديسكفري':'Discovery','إيفوك':'Evoque','سبورت':'Sport','ديفندر':'Defender',
+  'داستر':'Duster','كوليوس':'Koleos','ميجان':'Megane','تاليسمان':'Talisman',
+  'يوني-تي':'Uni-T','يوني-كيه':'Uni-K','الزدل':'Alsvin','إيدو':'Eado',
+  'كولراي':'Coolray','إمجراند':'Emgrand','أزكارا':'Azkarra','توجيلا':'Tugella','مونجارو':'Monjaro','بينراي':'Binray','أوكافانجو':'Okavango','جيومتري':'Geometry',
+  'وان':'One',
+  'تيجو 2':'Tiggo 2','تيجو 4':'Tiggo 4','تيجو 7':'Tiggo 7','تيجو 8':'Tiggo 8','أريزو 5':'Arrizo 5','أريزو 6':'Arrizo 6','أوموندا':'Omoda',
+  'جوليان':'Jolion','دارجو':'Dargo',
+  'وينجل 5':'Wingle 5','وينجل 7':'Wingle 7','باور':'Poer','كانون':'Cannon','تانك 300':'Tank 300','تانك 500':'Tank 500',
+  'إيجل':'Aeolus','ريتش':'Rich',
+  'جيس 4':'JS4',
+  'سونغ':'Song','تانغ':'Tang','هان':'Han','يوان':'Yuan','دولفين':'Dolphin','أتو 3':'Atto 3','سيل':'Seal',
+  'بيستون T77':'Bestune T77','بيستون T99':'Bestune T99','بيستون 7':'Bestune 7','أمبيشن':'Ambition',
+  'داشينغ':'Dashing',
+  'دامي X5':'Damy X5',
+};
+
+// موديل بصيغة معروضة حسب اللغة (إنجليزي إن وُجد، وإلا يبقى كما هو)
+function modelEn(m) { return MODEL_EN[m] || m; }
+
+// نسخة ماركات ثنائية اللغة للواجهة: [{ ar, en, origin, originEn, models, modelsI18n }]
 const BRANDS_I18N = Object.keys(BRANDS).map(ar => ({
   ar,
   en: BRAND_EN[ar] || ar,
   origin: BRANDS[ar].origin,
   originEn: ORIGIN_EN[BRANDS[ar].origin] || BRANDS[ar].origin,
   models: BRANDS[ar].models,
+  modelsI18n: BRANDS[ar].models.map(m => ({ ar: m, en: modelEn(m) })),
 }));
 
 function originForBrand(brand) {
@@ -101,4 +139,4 @@ function brandsForOrigin(origin) {
   return Object.keys(BRANDS).filter(b => BRANDS[b].origin === origin);
 }
 
-module.exports = { BRANDS, ORIGINS, CONDITIONS, BRAND_EN, ORIGIN_EN, CONDITION_EN, BRANDS_I18N, originForBrand, brandsForOrigin };
+module.exports = { BRANDS, ORIGINS, CONDITIONS, BRAND_EN, ORIGIN_EN, CONDITION_EN, MODEL_EN, BRANDS_I18N, originForBrand, brandsForOrigin };
