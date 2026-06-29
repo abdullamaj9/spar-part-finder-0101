@@ -95,50 +95,51 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>كارلي لقطع الغيار</h1>
-  <p>أرسل طلبك، نجمع لك أفضل الأسعار خلال 90 ثانية — مجانًا</p>
+<header style="position:relative">
+  <button id="langToggle" onclick="toggleLang()" style="position:absolute;top:0;inset-inline-end:0;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-size:14px;font-weight:600;color:var(--navy);cursor:pointer">English</button>
+  <h1 data-i18n="appTitle">كارلي لقطع الغيار</h1>
+  <p data-i18n="appSubtitle">أرسل طلبك، نجمع لك أفضل الأسعار خلال 90 ثانية — مجانًا</p>
 </header>
 
 <!-- مرحلة 1: النموذج -->
 <div id="formStage">
   <div class="card">
     <div class="field">
-      <label>رقمك على واتساب</label>
-      <input id="whatsapp" type="tel" placeholder="مثال: 0501234567" inputmode="numeric">
+      <label data-i18n="waNumber">رقمك على واتساب</label>
+      <input id="whatsapp" type="tel" placeholder="مثال: 0501234567" data-i18n-ph="waPlaceholder" inputmode="numeric">
     </div>
     <div class="field">
-      <label><input type="checkbox" id="isWorkshop" style="width:auto;display:inline"> أنا ورشة / تاجر</label>
+      <label><input type="checkbox" id="isWorkshop" style="width:auto;display:inline"> <span data-i18n="isWorkshop">أنا ورشة / تاجر</span></label>
     </div>
     <div class="row">
       <div class="field">
-        <label>الشركة</label>
-        <select id="brand"><option value="">اختر...</option></select>
+        <label data-i18n="brand">الشركة</label>
+        <select id="brand"><option value="" data-i18n="choose">اختر...</option></select>
       </div>
       <div class="field">
-        <label>الموديل</label>
-        <select id="model"><option value="">اختر الشركة أولًا</option></select>
+        <label data-i18n="model">الموديل</label>
+        <select id="model"><option value="" data-i18n="chooseBrandFirst">اختر الشركة أولًا</option></select>
       </div>
     </div>
     <div class="row">
       <div class="field">
-        <label>سنة الصنع</label>
+        <label data-i18n="year">سنة الصنع</label>
         <input id="year" type="number" placeholder="2020" inputmode="numeric">
       </div>
       <div class="field">
-        <label>رقم الشاصي (اختياري)</label>
+        <label data-i18n="vin">رقم الشاصي (اختياري)</label>
         <input id="vin" type="text" placeholder="VIN">
       </div>
     </div>
   </div>
 
   <div class="card">
-    <label style="font-size:15px;color:var(--navy);margin-bottom:12px">القطع المطلوبة</label>
+    <label data-i18n="requestedParts" style="font-size:15px;color:var(--navy);margin-bottom:12px">القطع المطلوبة</label>
     <div id="itemsContainer"></div>
-    <button class="btn btn-ghost" onclick="addItem()" style="margin-top:6px">+ إضافة قطعة أخرى</button>
+    <button class="btn btn-ghost" onclick="addItem()" data-i18n="addAnotherPart" style="margin-top:6px">+ إضافة قطعة أخرى</button>
   </div>
 
-  <button class="btn" onclick="submitRequest()">إرسال الطلب وبدء البحث</button>
+  <button class="btn" onclick="submitRequest()" data-i18n="submitRequest">إرسال الطلب وبدء البحث</button>
 </div>
 
 <!-- مرحلة 2: العداد -->
@@ -150,50 +151,166 @@
         <div class="gear-face gear-back">⚙️</div>
       </div>
     </div>
-    <div class="countdown"><span id="counter">90</span><small>ثانية — نجمع العروض من الموردين</small></div>
+    <div class="countdown"><span id="counter">90</span><small data-i18n="countdownSec">ثانية — نجمع العروض من الموردين</small></div>
     <p id="orderNo" style="display:none;color:var(--navy);font-weight:600;font-size:14px;margin-top:10px;background:#f0f0f5;border-radius:8px;padding:8px 14px;display:inline-block"></p>
-    <p class="tip" id="tip" style="transition:opacity .3s">جارٍ إرسال طلبك لأفضل الموردين المتخصصين...</p>
+    <p class="tip" id="tip" data-def="1" style="transition:opacity .3s">جارٍ إرسال طلبك لأفضل الموردين المتخصصين...</p>
   </div>
 </div>
 
 <!-- مرحلة 3: النتائج -->
 <div id="resultsStage" class="hidden">
   <div class="card">
-    <h2 style="color:var(--navy);font-size:18px;margin-bottom:4px">أفضل العروض</h2>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">اختر الطريقة التي تناسبك</p>
+    <h2 data-i18n="bestOffers" style="color:var(--navy);font-size:18px;margin-bottom:4px">أفضل العروض</h2>
+    <p data-i18n="chooseMethod" style="color:var(--muted);font-size:13px;margin-bottom:14px">اختر الطريقة التي تناسبك</p>
     <div style="display:flex;gap:8px;margin-bottom:16px">
-      <button class="btn btn-ghost" id="modeBasket" onclick="setMode('basket',this)" style="flex:1">مورد واحد للكل</button>
-      <button class="btn btn-ghost" id="modeItem" onclick="setMode('item',this)" style="flex:1">أرخص لكل قطعة</button>
+      <button class="btn btn-ghost" id="modeBasket" onclick="setMode('basket',this)" data-i18n="oneSupplierAll" style="flex:1">مورد واحد للكل</button>
+      <button class="btn btn-ghost" id="modeItem" onclick="setMode('item',this)" data-i18n="cheapestPerPart" style="flex:1">أرخص لكل قطعة</button>
     </div>
     <div id="basketView"></div>
     <div id="itemView" class="hidden"></div>
-    <button class="btn hidden" id="confirmBtn" onclick="confirmChoice()" style="margin-top:14px">تأكيد الاختيار</button>
+    <button class="btn hidden" id="confirmBtn" onclick="confirmChoice()" data-i18n="confirmChoice" style="margin-top:14px">تأكيد الاختيار</button>
   </div>
 </div>
 
 <script>
+// ===== نظام اللغة (عربي/إنجليزي) =====
+const I18N = {
+  appTitle:        { ar: 'كارلي لقطع الغيار', en: 'Carly Spare Parts' },
+  appSubtitle:     { ar: 'أرسل طلبك، نجمع لك أفضل الأسعار خلال 90 ثانية — مجانًا', en: 'Send your request, we gather the best prices in 90 seconds — free' },
+  waNumber:        { ar: 'رقمك على واتساب', en: 'Your WhatsApp number' },
+  waPlaceholder:   { ar: 'مثال: 0501234567', en: 'e.g. 0501234567' },
+  isWorkshop:      { ar: 'أنا ورشة / تاجر', en: "I'm a workshop / dealer" },
+  brand:           { ar: 'الشركة', en: 'Make' },
+  model:           { ar: 'الموديل', en: 'Model' },
+  choose:          { ar: 'اختر...', en: 'Choose...' },
+  chooseBrandFirst:{ ar: 'اختر الشركة أولًا', en: 'Choose make first' },
+  year:            { ar: 'سنة الصنع', en: 'Year' },
+  vin:             { ar: 'رقم الشاصي (اختياري)', en: 'Chassis number (optional)' },
+  requestedParts:  { ar: 'القطع المطلوبة', en: 'Requested parts' },
+  addAnotherPart:  { ar: '+ إضافة قطعة أخرى', en: '+ Add another part' },
+  submitRequest:   { ar: 'إرسال الطلب وبدء البحث', en: 'Submit request & start search' },
+  countdownSec:    { ar: 'ثانية — نجمع العروض من الموردين', en: 'sec — gathering offers from suppliers' },
+  tipSending:      { ar: 'جارٍ إرسال طلبك لأفضل الموردين المتخصصين...', en: 'Sending your request to the best specialized suppliers...' },
+  bestOffers:      { ar: 'أفضل العروض', en: 'Best offers' },
+  chooseMethod:    { ar: 'اختر الطريقة التي تناسبك', en: 'Choose the method that suits you' },
+  oneSupplierAll:  { ar: 'مورد واحد للكل', en: 'One supplier for all' },
+  cheapestPerPart: { ar: 'أرخص لكل قطعة', en: 'Cheapest per part' },
+  confirmChoice:   { ar: 'تأكيد الاختيار', en: 'Confirm choice' },
+  section:         { ar: 'القسم', en: 'Category' },
+  part:            { ar: 'القطعة', en: 'Part' },
+  chooseCatFirst:  { ar: 'اختر القسم أولاً', en: 'Choose category first' },
+  typeOrChoose:    { ar: 'اكتب أو اختر القطعة...', en: 'Type or choose the part...' },
+  note:            { ar: 'توضيح (اختياري)', en: 'Note (optional)' },
+  notePlaceholder: { ar: 'مثال: أمامي يمين، خلفي يسار...', en: 'e.g. front right, rear left...' },
+  type:            { ar: 'النوع', en: 'Condition' },
+  partImage:       { ar: 'صورة القطعة (اختياري)', en: 'Part image (optional)' },
+  partNo:          { ar: 'القطعة رقم', en: 'Part #' },
+  remove:          { ar: '✕ حذف', en: '✕ Remove' },
+  chooseCat:       { ar: '— اختر القسم —', en: '— Choose category —' },
+  willSendAsTyped: { ar: '✓ ستُرسل القطعة كما كتبتها', en: '✓ Will send the part as you typed it' },
+  confirmPartHint: { ar: '⚠️ اختر قطعة من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبت', en: '⚠️ Choose a part from the list, or tap "➕ Add" to send as typed' },
+  alertNotFound:   { ar: 'الطلب غير موجود', en: 'Order not found' },
+  alertOpenFail:   { ar: 'تعذّر فتح الطلب، حاول مجددًا', en: 'Could not open the order, try again' },
+  alertEnterPhone: { ar: 'أدخل رقمك واختر الشركة', en: 'Enter your number and choose the make' },
+  alertChoosePart: { ar: 'اختر قطعة واحدة على الأقل: حدّد القسم ثم القطعة.', en: 'Choose at least one part: select category then part.' },
+  alertSendFail:   { ar: 'تعذّر إرسال الطلب، حاول مجددًا', en: 'Could not send the request, try again' },
+  alertChooseSupplier: { ar: 'اختر موردًا', en: 'Choose a supplier' },
+  alertChooseOffer:{ ar: 'اختر عرضًا واحدًا على الأقل', en: 'Choose at least one offer' },
+  newPartRequest:  { ar: '🔍 طلب قطعة جديدة', en: '🔍 New part request' },
+  newRequest:      { ar: '🔍 إرسال طلب جديد', en: '🔍 Send new request' },
+  orderConfirmed:  { ar: 'تم تأكيد طلبك ✓', en: 'Your order is confirmed ✓' },
+  willContactYou:  { ar: 'سيتواصل معك', en: 'Will contact you' },
+  contactViaWa:    { ar: 'ستصلك بياناتهم عبر الواتساب', en: 'Their details will reach you via WhatsApp' },
+  yourOrderNo:     { ar: '📋 رقم طلبك:', en: '📋 Your order no.:' },
+  alreadyConfirmed:{ ar: 'تم تأكيد هذا الطلب مسبقًا ✓', en: 'This order was already confirmed ✓' },
+  expiredTitle:    { ar: 'انتهت صلاحية العروض ⏳', en: 'Offers expired ⏳' },
+  expiredBody:     { ar: 'عذرًا، انتهت مهلة اختيار العروض لطلبك', en: 'Sorry, the offer selection window for your order has ended' },
+  expiredHint:     { ar: 'الأسعار تتغيّر بسرعة، لذا نطلب منك إرسال طلب جديد للحصول على أحدث العروض.', en: 'Prices change fast, so please send a new request for the latest offers.' },
+  cheapest:        { ar: 'الأرخص', en: 'Cheapest' },
+  selected:        { ar: 'مختار', en: 'Selected' },
+  reply:           { ar: 'رد', en: 'reply' },
+  rating:          { ar: 'تقييم', en: 'rating' },
+  coversParts:     { ar: 'يغطي', en: 'covers' },
+  ofParts:         { ar: 'من', en: 'of' },
+  partsUnit:       { ar: 'قطعة', en: 'parts' },
+  currency:        { ar: 'درهم', en: 'AED' },
+  noOffersYet:     { ar: 'لم تصل عروض بعد.', en: 'No offers yet.' },
+  noOffers:        { ar: 'لا عروض', en: 'No offers' },
+  partLabel:       { ar: 'القطعة', en: 'Part' },
+  secShort:        { ar: 'ث', en: 's' },
+};
+
+let LANG = (function() {
+  try { return localStorage.getItem('carly_lang') || 'ar'; } catch { return 'ar'; }
+})();
+
+function t(key) {
+  const e = I18N[key];
+  return e ? (e[LANG] || e.ar) : key;
+}
+
+function setLang(lang) {
+  LANG = lang;
+  try { localStorage.setItem('carly_lang', lang); } catch {}
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  const tg = document.getElementById('langToggle');
+  if (tg) tg.textContent = lang === 'ar' ? 'English' : 'عربي';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.getAttribute('data-i18n');
+    if (I18N[k]) el.textContent = t(k);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    const k = el.getAttribute('data-i18n-ph');
+    if (I18N[k]) el.placeholder = t(k);
+  });
+  refreshDynamicTexts();
+}
+
+function toggleLang() { setLang(LANG === 'ar' ? 'en' : 'ar'); }
+
+function refreshDynamicTexts() {
+  if (META && META.brandsI18n && typeof fillBrandsSelect === 'function') fillBrandsSelect();
+  if (typeof renumberItems === 'function') renumberItems();
+  const tip = document.getElementById('tip');
+  if (tip && tip.dataset.def === '1') tip.textContent = t('tipSending');
+}
+
 let META = { brands: [], brandModels: {}, conditions: [], partCategories: {}, categoryNames: [], countdown: 90 };
 let currentItemIds = [];
 
 async function loadMeta() {
   const res = await fetch('/api/meta');
   META = await res.json();
-  const bsel = document.getElementById('brand');
-  META.brands.forEach(b => {
-    const o = document.createElement('option'); o.value = b; o.textContent = b; bsel.appendChild(o);
-  });
+  fillBrandsSelect();
   addItem();
+  setLang(LANG); // طبّق اللغة المحفوظة على كل العناصر
   // لو الرابط فيه ?order=CARLY-21 → افتح صفحة نتائج الطلب مباشرة
   const params = new URLSearchParams(location.search);
   const order = params.get('order');
   if (order) openOrderFromLink(order);
 }
 
+// تعبئة قائمة الماركات بالاسم حسب اللغة (القيمة تبقى عربية للتخزين)
+function fillBrandsSelect() {
+  const bsel = document.getElementById('brand');
+  if (!bsel) return;
+  const cur = bsel.value;
+  const list = META.brandsI18n || META.brands.map(b => ({ ar: b, en: b }));
+  bsel.innerHTML = `<option value="">${t('choose')}</option>` +
+    list.map(b => {
+      const ar = b.ar || b;
+      const label = LANG === 'en' ? (b.en || ar) : ar;
+      return `<option value="${ar}">${label}</option>`;
+    }).join('');
+  if (cur) bsel.value = cur;
+}
+
 // فتح طلب موجود عبر رقمه (من رابط الواتساب)
 async function openOrderFromLink(orderNumber) {
   try {
     const data = await (await fetch('/api/orders/' + encodeURIComponent(orderNumber))).json();
-    if (!data.found) { alert('الطلب غير موجود'); return; }
+    if (!data.found) { alert(t('alertNotFound')); return; }
     // لو منتهي الصلاحية → صفحة "انتهت الصلاحية"
     if (data.validity && data.validity.expired) {
       showExpiredPage(data.order_number);
@@ -204,9 +321,9 @@ async function openOrderFromLink(orderNumber) {
       document.getElementById('formStage').classList.add('hidden');
       document.getElementById('resultsStage').classList.remove('hidden');
       document.getElementById('resultsStage').innerHTML =
-        `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد هذا الطلب مسبقًا ✓</h2>
+        `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">${t('alreadyConfirmed')}</h2>
          <p style="margin-top:10px;color:var(--navy);font-weight:600">📋 ${data.order_number}</p>
-         <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 طلب قطعة جديدة</button></div>`;
+         <button class="btn" onclick="resetToStart()" style="margin-top:18px">${t('newPartRequest')}</button></div>`;
       return;
     }
     // غير ذلك: اعرض العروض للاختيار
@@ -216,7 +333,7 @@ async function openOrderFromLink(orderNumber) {
     document.getElementById('countdownStage').classList.add('hidden');
     showResults();
   } catch (e) {
-    alert('تعذّر فتح الطلب، حاول مجددًا');
+    alert(t('alertOpenFail'));
   }
 }
 
@@ -228,10 +345,10 @@ function showExpiredPage(orderNo) {
   stage.classList.remove('hidden');
   stage.innerHTML =
     `<div class="card" style="text-align:center">
-       <h2 style="color:#c0392b">انتهت صلاحية العروض ⏳</h2>
-       <p style="margin-top:10px">عذرًا، انتهت مهلة اختيار العروض لطلبك ${orderNo || ''}.</p>
-       <p class="muted" style="margin-top:6px">الأسعار تتغيّر بسرعة، لذا نطلب منك إرسال طلب جديد للحصول على أحدث العروض.</p>
-       <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 إرسال طلب جديد</button>
+       <h2 style="color:#c0392b">${t('expiredTitle')}</h2>
+       <p style="margin-top:10px">${t('expiredBody')} ${orderNo || ''}.</p>
+       <p class="muted" style="margin-top:6px">${t('expiredHint')}</p>
+       <button class="btn" onclick="resetToStart()" style="margin-top:18px">${t('newRequest')}</button>
      </div>`;
 }
 
@@ -250,23 +367,33 @@ function addItem() {
   const div = document.createElement('div');
   div.className = 'item-block';
   div.id = 'item-' + id;
-  const condOptions = META.conditions.map(c => `<option value="${c}">${c}</option>`).join('');
-  const catOptions = (META.categoryNames || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  // الحالات: القيمة عربية (للتخزين)، العرض حسب اللغة
+  const condOptions = (META.conditions || []).map(c => {
+    const label = (LANG === 'en' && META.conditionEn && META.conditionEn[c]) ? META.conditionEn[c] : c;
+    return `<option value="${c}">${label}</option>`;
+  }).join('');
+  // الأقسام: القيمة عربية، العرض حسب اللغة (من categoriesI18n)
+  const cats = META.categoriesI18n || (META.categoryNames || []).map(c => ({ ar: c, en: c }));
+  const catOptions = cats.map(c => {
+    const ar = c.ar || c;
+    const label = LANG === 'en' ? (c.en || ar) : ar;
+    return `<option value="${ar}">${label}</option>`;
+  }).join('');
   div.innerHTML = `
     <div class="item-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <h3 class="item-title" style="color:var(--navy);font-size:15px;margin:0">القطعة رقم ${id}</h3>
-      ${id > 1 ? `<button class="remove" onclick="removeItem('item-${id}')" style="position:static">✕ حذف</button>` : ''}
+      <h3 class="item-title" style="color:var(--navy);font-size:15px;margin:0">${t('partNo')} ${id}</h3>
+      ${id > 1 ? `<button class="remove" onclick="removeItem('item-${id}')" style="position:static">${t('remove')}</button>` : ''}
     </div>
     <div class="field">
-      <label>القسم</label>
+      <label>${t('section')}</label>
       <select class="part-category" onchange="fillParts(this)">
-        <option value="">— اختر القسم —</option>${catOptions}
+        <option value="">${t('chooseCat')}</option>${catOptions}
       </select>
     </div>
     <div class="field" style="position:relative">
-      <label>القطعة</label>
+      <label>${t('part')}</label>
       <input type="text" class="part-search" autocomplete="off" disabled
-             placeholder="اختر القسم أولاً"
+             placeholder="${t('chooseCatFirst')}"
              oninput="onPartSearch(this)" onfocus="onPartSearch(this)"
              onblur="hideSuggestions(this)">
       <input type="hidden" class="part-value">
@@ -274,15 +401,15 @@ function addItem() {
       <small class="part-hint" style="display:none;color:#888;margin-top:4px"></small>
     </div>
     <div class="field">
-      <label>توضيح (اختياري)</label>
-      <input type="text" class="part-note" placeholder="مثال: أمامي يمين، خلفي يسار...">
+      <label>${t('note')}</label>
+      <input type="text" class="part-note" placeholder="${t('notePlaceholder')}">
     </div>
     <div class="field">
-      <label>النوع</label>
+      <label>${t('type')}</label>
       <select class="part-condition">${condOptions}</select>
     </div>
     <div class="field">
-      <label>صورة القطعة (اختياري)</label>
+      <label>${t('partImage')}</label>
       <input type="file" class="part-image" accept="image/*" onchange="previewImg(this)">
       <img class="preview">
     </div>`;
@@ -302,20 +429,29 @@ function renumberItems() {
   const blocks = document.querySelectorAll('#itemsContainer .item-block');
   blocks.forEach((b, i) => {
     const title = b.querySelector('.item-title');
-    if (title) title.textContent = 'القطعة رقم ' + (i + 1);
+    if (title) title.textContent = t('partNo') + ' ' + (i + 1);
+    const rm = b.querySelector('.remove');
+    if (rm) rm.textContent = t('remove');
   });
 }
 // عند اختيار القسم: نفعّل خانة بحث القطعة ونخزّن قطع القسم عليها
 function fillParts(sel) {
   const block = sel.closest('.item-block');
   const search = block.querySelector('.part-search');
-  const cat = sel.value;
-  const parts = (META.partCategories && META.partCategories[cat]) || [];
-  search._parts = parts;          // نخزّن قطع القسم على العنصر
+  const cat = sel.value; // القيمة عربية دائمًا
+  // نجلب القطع ثنائية اللغة للقسم المختار
+  let parts = [];
+  if (META.categoriesI18n) {
+    const c = META.categoriesI18n.find(x => x.ar === cat);
+    parts = c ? c.parts.slice() : [];
+  } else {
+    parts = ((META.partCategories && META.partCategories[cat]) || []).map(p => ({ ar: p, en: p }));
+  }
+  search._parts = parts;          // [{ar, en}]
   search.disabled = !cat;
   search.value = '';
   block.querySelector('.part-value').value = '';
-  search.placeholder = cat ? 'اكتب أو اختر القطعة...' : 'اختر القسم أولاً';
+  search.placeholder = cat ? t('typeOrChoose') : t('chooseCatFirst');
   hideSuggestions(search);
   block.querySelector('.part-hint').style.display = 'none';
 }
@@ -326,27 +462,34 @@ function onPartSearch(input) {
   const box = block.querySelector('.part-suggestions');
   const hint = block.querySelector('.part-hint');
   const hidden = block.querySelector('.part-value');
-  const parts = input._parts || [];
+  const parts = input._parts || []; // [{ar, en}]
   const q = input.value.trim();
+  const ql = q.toLowerCase();
 
   // أي تعديل يدوي يُلغي الاختيار المخزّن حتى يُعاد تأكيده
   hidden.value = '';
 
-  // فلترة القطع حسب النص (يطابق أي جزء)
-  const matches = q ? parts.filter(p => p.includes(q)) : parts;
+  // الاسم المعروض حسب اللغة
+  const disp = p => (LANG === 'en' ? (p.en || p.ar) : p.ar);
+  // الفلترة تطابق العربي والإنجليزي معًا
+  const matches = q
+    ? parts.filter(p => p.ar.includes(q) || (p.en || '').toLowerCase().includes(ql))
+    : parts;
 
+  const esc = s => String(s).replace(/'/g, "\\'");
   let html = '';
   if (matches.length) {
     html = matches.map(p =>
       `<div class="sug-item" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
-            onmousedown="pickPart(this,'${p.replace(/'/g,"\\'")}')">${p}</div>`
+            onmousedown="pickPart(this,'${esc(p.ar)}','${esc(disp(p))}')">${disp(p)}</div>`
     ).join('');
   }
   // لو فيه نص مكتوب وما يطابق أي قطعة تمامًا → خيار "إضافة ما كتبه"
-  const exact = parts.some(p => p === q);
+  const exact = parts.some(p => p.ar === q || (p.en || '').toLowerCase() === ql);
   if (q && !exact) {
+    const addLabel = LANG === 'en' ? `➕ Add "${q}" as a new part` : `➕ إضافة "${q}" كقطعة جديدة`;
     html += `<div class="sug-item sug-add" style="padding:10px 12px;cursor:pointer;background:#eef6ff;font-weight:600;color:var(--navy)"
-                  onmousedown="pickCustom(this,'${q.replace(/'/g,"\\'")}')">➕ إضافة "${q}" كقطعة جديدة</div>`;
+                  onmousedown="pickCustom(this,'${esc(q)}')">${addLabel}</div>`;
   }
 
   if (html) { box.innerHTML = html; box.style.display = 'block'; }
@@ -355,10 +498,10 @@ function onPartSearch(input) {
 }
 
 // اختيار قطعة من القائمة
-function pickPart(el, name) {
+function pickPart(el, arValue, dispName) {
   const block = el.closest('.item-block');
-  block.querySelector('.part-search').value = name;
-  block.querySelector('.part-value').value = name;
+  block.querySelector('.part-search').value = dispName || arValue;
+  block.querySelector('.part-value').value = arValue; // القيمة المخزّنة عربية دائمًا
   const box = block.querySelector('.part-suggestions');
   box.style.display = 'none';
   const hint = block.querySelector('.part-hint');
@@ -373,7 +516,7 @@ function pickCustom(el, name) {
   const box = block.querySelector('.part-suggestions');
   box.style.display = 'none';
   const hint = block.querySelector('.part-hint');
-  hint.textContent = '✓ ستُرسل القطعة كما كتبتها';
+  hint.textContent = t('willSendAsTyped');
   hint.style.color = '#2a8a4a';
   hint.style.display = 'block';
 }
@@ -388,7 +531,7 @@ function hideSuggestions(input) {
     const search = block.querySelector('.part-search');
     const hint = block.querySelector('.part-hint');
     if (search.value.trim() && !hidden.value) {
-      hint.textContent = '⚠️ اختر قطعة من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبت';
+      hint.textContent = t('confirmPartHint');
       hint.style.color = '#c0392b';
       hint.style.display = 'block';
     }
@@ -407,7 +550,7 @@ function previewImg(input) {
 async function submitRequest() {
   const whatsapp = document.getElementById('whatsapp').value.trim();
   const brand = document.getElementById('brand').value;
-  if (!whatsapp || !brand) { alert('أدخل رقمك واختر الشركة'); return; }
+  if (!whatsapp || !brand) { alert(t('alertEnterPhone')); return; }
 
   const items = [];
   const incompleteParts = []; // أرقام القطع الناقصة (لتنبيه دقيق)
@@ -439,13 +582,14 @@ async function submitRequest() {
 
   // تحقق صارم: لو فيه قطعة ناقصة، امنع الإرسال ووجّه العميل بدقة
   if (incompleteParts.length > 0) {
-    const list = incompleteParts.join('، ');
-    alert(`القطعة رقم ${list} غير مكتملة.\n\n` +
-      `اكتب اسم القطعة واختَرها من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبتها.\n` +
-      `ثم أرسل الطلب.`);
-    return; // نمنع الإرسال حتى يكمل
+    const list = incompleteParts.join(LANG === 'en' ? ', ' : '، ');
+    const msg = LANG === 'en'
+      ? `Part # ${list} is incomplete.\n\nType the part name and choose it from the list, or tap "➕ Add" to send it as typed.\nThen submit the request.`
+      : `القطعة رقم ${list} غير مكتملة.\n\nاكتب اسم القطعة واختَرها من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبتها.\nثم أرسل الطلب.`;
+    alert(msg);
+    return;
   }
-  if (!items.length) { alert('اختر قطعة واحدة على الأقل: حدّد القسم ثم القطعة.'); return; }
+  if (!items.length) { alert(t('alertChoosePart')); return; }
 
   const payload = {
     whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
@@ -473,11 +617,11 @@ async function submitRequest() {
     // عرض رقم الطلبية للعميل
     if (data.order_number) {
       const el = document.getElementById('orderNo');
-      el.textContent = '📋 رقم طلبك: ' + data.order_number;
+      el.textContent = t('yourOrderNo') + ' ' + data.order_number;
       el.style.display = 'inline-block';
     }
   } catch (e) {
-    alert('تعذّر إرسال الطلب، حاول مجددًا'); backToForm();
+    alert(t('alertSendFail')); backToForm();
   }
 }
 
@@ -558,7 +702,7 @@ function startCountdown() {
       if (st.ready) { // جاهز — اعرض النتائج فورًا
         clearInterval(iv); clearInterval(tipIv);
         counter.textContent = '✓';
-        tip.textContent = '🎉 وصلت العروض! جارٍ العرض...';
+        tip.textContent = LANG === 'en' ? '🎉 Offers arrived! Loading...' : '🎉 وصلت العروض! جارٍ العرض...';
         setTimeout(showResults, 800);
         return;
       }
@@ -622,14 +766,14 @@ function setMode(mode, btn) {
 
 function renderBaskets() {
   const v = document.getElementById('basketView');
-  if (!basketData.baskets.length) { v.innerHTML = '<p class="muted">لم تصل عروض بعد.</p>'; return; }
+  if (!basketData.baskets.length) { v.innerHTML = `<p class="muted">${t('noOffersYet')}</p>`; return; }
   v.innerHTML = basketData.baskets.map(b => `
     <div class="offer ${basketChoice===b.supplier_id?'best':''}" onclick="pickBasket(${b.supplier_id})" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:6px">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="price">${b.sum} درهم</div>
-        ${basketChoice===b.supplier_id?'<span class="badge">مختار</span>':''}
+        <div class="price">${b.sum} ${t('currency')}</div>
+        ${basketChoice===b.supplier_id?`<span class="badge">${t('selected')}</span>`:''}
       </div>
-      <div class="meta">يغطي ${b.covered} من ${b.total_items} قطعة · تقييم ${b.rating||'—'}</div>
+      <div class="meta">${t('coversParts')} ${b.covered} ${t('ofParts')} ${b.total_items} ${t('partsUnit')} · ${t('rating')} ${b.rating||'—'}</div>
     </div>`).join('');
 }
 
@@ -640,13 +784,13 @@ function renderItems() {
   let html = '';
   currentItemIds.forEach((itemId, idx) => {
     const offers = itemOffers[itemId] || [];
-    html += `<div class="item-result"><h3>القطعة ${idx+1}</h3>`;
-    if (!offers.length) html += '<p class="muted" style="font-size:14px">لا عروض</p>';
+    html += `<div class="item-result"><h3>${t('partLabel')} ${idx+1}</h3>`;
+    if (!offers.length) html += `<p class="muted" style="font-size:14px">${t('noOffers')}</p>`;
     else offers.forEach((o,i) => {
       html += `<div class="offer ${itemChoices[itemId]===o.id?'best':''}" onclick="pickItem(${itemId},${o.id})" style="cursor:pointer">
-        <div><div class="price">${o.price} درهم ${i===0?'<span class="badge">الأرخص</span>':''}</div>
-        <div class="meta">رد ${o.reply_seconds}ث · تقييم ${o.avg_rating||'—'}</div></div>
-        ${itemChoices[itemId]===o.id?'<span class="badge">مختار</span>':''}</div>`;
+        <div><div class="price">${o.price} ${t('currency')} ${i===0?`<span class="badge">${t('cheapest')}</span>`:''}</div>
+        <div class="meta">${t('reply')} ${o.reply_seconds}${t('secShort')} · ${t('rating')} ${o.avg_rating||'—'}</div></div>
+        ${itemChoices[itemId]===o.id?`<span class="badge">${t('selected')}</span>`:''}</div>`;
     });
     html += '</div>';
   });
@@ -658,7 +802,7 @@ function pickItem(itemId, offerId) { itemChoices[itemId] = offerId; renderItems(
 async function confirmChoice() {
   let choices = [];
   if (selectedMode === 'basket') {
-    if (!basketChoice) { alert('اختر موردًا'); return; }
+    if (!basketChoice) { alert(t('alertChooseSupplier')); return; }
     // كل قطع المورد المختار من عروضه
     for (const itemId of currentItemIds) {
       const o = (itemOffers[itemId]||[]).find(of => of.supplier_id === basketChoice);
@@ -666,22 +810,22 @@ async function confirmChoice() {
     }
   } else {
     choices = Object.entries(itemChoices).map(([item_id, offer_id]) => ({ item_id: +item_id, offer_id }));
-    if (!choices.length) { alert('اختر عرضًا واحدًا على الأقل'); return; }
+    if (!choices.length) { alert(t('alertChooseOffer')); return; }
   }
   const res = await fetch('/api/requests/choose', {
     method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ choices }),
   });
   const data = await res.json();
   if (data.error) { alert(data.error); return; }
-  const names = data.winners.map(w => `${w.name} (${w.items_won} قطعة)`).join('، ');
+  const names = data.winners.map(w => `${w.name} (${w.items_won} ${t('partsUnit')})`).join(LANG === 'en' ? ', ' : '، ');
   const orderLine = data.order_number
-    ? `<p style="margin-top:6px;color:var(--navy);font-weight:600">📋 رقم طلبك: ${data.order_number}</p>` : '';
+    ? `<p style="margin-top:6px;color:var(--navy);font-weight:600">${t('yourOrderNo')} ${data.order_number}</p>` : '';
   document.getElementById('resultsStage').innerHTML =
-    `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد طلبك ✓</h2>
-     <p style="margin-top:10px">سيتواصل معك: ${names}</p>
+    `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">${t('orderConfirmed')}</h2>
+     <p style="margin-top:10px">${t('willContactYou')}: ${names}</p>
      ${orderLine}
-     <p class="muted" style="margin-top:8px">ستصلك بياناتهم عبر الواتساب</p>
-     <button class="btn" onclick="resetToStart()" style="margin-top:18px">🔍 طلب قطعة جديدة</button>
+     <p class="muted" style="margin-top:8px">${t('contactViaWa')}</p>
+     <button class="btn" onclick="resetToStart()" style="margin-top:18px">${t('newPartRequest')}</button>
      </div>`;
 }
 
