@@ -7,8 +7,8 @@ const { db, getSetting, setSetting } = require('./db');
 const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
 const { sendText, sendTemplateRequest, sendDealWon, sendOffersReady, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
-const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
-const { PART_CATEGORIES, CATEGORY_NAMES } = require('./parts');
+const { BRANDS, ORIGINS, CONDITIONS, BRANDS_I18N, CONDITION_EN, ORIGIN_EN } = require('./brands');
+const { PART_CATEGORIES, CATEGORY_NAMES, CATEGORIES_I18N } = require('./parts');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -54,6 +54,10 @@ app.get('/api/meta', (req, res) => {
     conditions: CONDITIONS,
     partCategories: PART_CATEGORIES,
     categoryNames: CATEGORY_NAMES,
+    categoriesI18n: CATEGORIES_I18N,
+    brandsI18n: BRANDS_I18N,
+    conditionEn: CONDITION_EN,
+    originEn: ORIGIN_EN,
     countdown: parseInt(getSetting('countdown_seconds'), 10),
     countdownPerItem: parseInt(getSetting('countdown_per_item'), 10) || 30,
     countdownMax: parseInt(getSetting('countdown_max'), 10) || 240,

@@ -58,6 +58,41 @@ const BRANDS = {
 const ORIGINS = ['ياباني', 'كوري', 'أمريكي', 'ألماني', 'أوروبي', 'صيني'];
 const CONDITIONS = ['جديد أصلي', 'جديد تجاري', 'مستعمل'];
 
+// ===== ترجمات إنجليزية (للعرض في الواجهة حسب لغة المستخدم) =====
+// القيم المخزّنة في الطلب تبقى عربية؛ هذه الخرائط للعرض فقط.
+const BRAND_EN = {
+  'تويوتا': 'Toyota', 'نيسان': 'Nissan', 'هوندا': 'Honda', 'ميتسوبيشي': 'Mitsubishi',
+  'مازدا': 'Mazda', 'لكزس': 'Lexus', 'إنفينيتي': 'Infiniti', 'سوزوكي': 'Suzuki',
+  'هيونداي': 'Hyundai', 'كيا': 'Kia', 'جينيسيس': 'Genesis',
+  'فورد': 'Ford', 'شيفروليه': 'Chevrolet', 'جمس': 'GMC', 'دودج': 'Dodge',
+  'كاديلاك': 'Cadillac', 'جيب': 'Jeep',
+  'مرسيدس': 'Mercedes', 'بي ام دبليو': 'BMW', 'أودي': 'Audi',
+  'فولكس واجن': 'Volkswagen', 'بورش': 'Porsche',
+  'لاند روفر': 'Land Rover', 'بيجو': 'Peugeot', 'رينو': 'Renault',
+  'شانجان': 'Changan', 'جيلي': 'Geely', 'إم جي': 'MG', 'شيري': 'Chery',
+  'هافال': 'Haval', 'جريت وول': 'Great Wall', 'بايك': 'BAIC', 'دونغفينغ': 'Dongfeng',
+  'جاك': 'JAC', 'بي واي دي': 'BYD', 'فاو': 'FAW', 'جيتور': 'Jetour',
+  'إكسبينغ': 'Xpeng', 'زوتي': 'Zotye', 'لينك آند كو': 'Lynk & Co',
+};
+
+const ORIGIN_EN = {
+  'ياباني': 'Japanese', 'كوري': 'Korean', 'أمريكي': 'American',
+  'ألماني': 'German', 'أوروبي': 'European', 'صيني': 'Chinese',
+};
+
+const CONDITION_EN = {
+  'جديد أصلي': 'Genuine new', 'جديد تجاري': 'Aftermarket new', 'مستعمل': 'Used',
+};
+
+// نسخة ماركات ثنائية اللغة للواجهة: [{ ar, en, origin, originEn, models }]
+const BRANDS_I18N = Object.keys(BRANDS).map(ar => ({
+  ar,
+  en: BRAND_EN[ar] || ar,
+  origin: BRANDS[ar].origin,
+  originEn: ORIGIN_EN[BRANDS[ar].origin] || BRANDS[ar].origin,
+  models: BRANDS[ar].models,
+}));
+
 function originForBrand(brand) {
   return BRANDS[brand] ? BRANDS[brand].origin : null;
 }
@@ -66,4 +101,4 @@ function brandsForOrigin(origin) {
   return Object.keys(BRANDS).filter(b => BRANDS[b].origin === origin);
 }
 
-module.exports = { BRANDS, ORIGINS, CONDITIONS, originForBrand, brandsForOrigin };
+module.exports = { BRANDS, ORIGINS, CONDITIONS, BRAND_EN, ORIGIN_EN, CONDITION_EN, BRANDS_I18N, originForBrand, brandsForOrigin };
