@@ -271,9 +271,59 @@ function toggleLang() { setLang(LANG === 'ar' ? 'en' : 'ar'); }
 
 function refreshDynamicTexts() {
   if (META && META.brandsI18n && typeof fillBrandsSelect === 'function') fillBrandsSelect();
+  // ترجمة عناصر القطع الموجودة دون مسح إدخالات المستخدم
+  document.querySelectorAll('#itemsContainer .item-block').forEach(b => {
+    // عناوين الحقول (labels بالترتيب: القسم، القطعة، التوضيح، النوع، الصورة)
+    const labels = b.querySelectorAll('.field > label');
+    const keys = ['section', 'part', 'note', 'type', 'partImage'];
+    labels.forEach((lb, i) => { if (keys[i]) lb.textContent = t(keys[i]); });
+    // placeholder خانة البحث
+    const search = b.querySelector('.part-search');
+    if (search) search.placeholder = search.disabled ? t('chooseCatFirst') : t('typeOrChoose');
+    // placeholder التوضيح
+    const note = b.querySelector('.part-note');
+    if (note) note.placeholder = t('notePlaceholder');
+    // إعادة بناء خيارات القسم (مع الحفاظ على المختار)
+    const catSel = b.querySelector('.part-category');
+    if (catSel) {
+      const curCat = catSel.value;
+      const cats = META.categoriesI18n || (META.categoryNames || []).map(c => ({ ar: c, en: c }));
+      catSel.innerHTML = `<option value="">${t('chooseCat')}</option>` +
+        cats.map(c => { const ar = c.ar || c; const label = LANG === 'en' ? (c.en || ar) : ar; return `<option value="${ar}">${label}</option>`; }).join('');
+      catSel.value = curCat;
+    }
+    // إعادة بناء خيارات النوع (الحالة)
+    const condSel = b.querySelector('.part-condition');
+    if (condSel) {
+      const curCond = condSel.value;
+      condSel.innerHTML = (META.conditions || []).map(c => {
+        const label = (LANG === 'en' && META.conditionEn && META.conditionEn[c]) ? META.conditionEn[c] : c;
+        return `<option value="${c}">${label}</option>`;
+      }).join('');
+      condSel.value = curCond;
+    }
+    // تحديث _parts (قائمة البحث) للقسم الحالي باللغة الجديدة
+    if (catSel && catSel.value && search) {
+      const c = (META.categoriesI18n || []).find(x => x.ar === catSel.value);
+      if (c) search._parts = c.parts.slice();
+      // لو فيه قطعة مختارة، حدّث النص المعروض
+      const hidden = b.querySelector('.part-value');
+      if (hidden && hidden.value && c) {
+        const found = c.parts.find(p => p.ar === hidden.value);
+        if (found) search.value = LANG === 'en' ? (found.en || found.ar) : found.ar;
+      }
+    }
+  });
   if (typeof renumberItems === 'function') renumberItems();
   const tip = document.getElementById('tip');
-  if (tip && tip.dataset.def === '1') tip.textContent = t('tipSending');
+  if (tip && tip.dataset.def === '1') {
+    tip.textContent = t('tipSending');
+  } else if (tip && window._tipState) {
+    // في صفحة العداد: أعد بناء النصائح باللغة الجديدة واعرض وحدة فورًا
+    window._tipState.rebuild();
+    const tips = window._tipState.tips;
+    if (tips && tips.length) tip.textContent = tips[0];
+  }
 }
 
 let META = { brands: [], brandModels: {}, conditions: [], partCategories: {}, categoryNames: [], countdown: 90 };
@@ -631,35 +681,49 @@ function backToForm() {
   document.getElementById('formStage').classList.remove('hidden');
 }
 
-// قاعدة نصائح حسب نوع القطعة (مفتاح: كلمة في اسم القطعة)
+// قاعدة نصائح حسب نوع القطعة (مفتاح: كلمة عربية في اسم القطعة) — ثنائية اللغة
 const PART_TIPS = {
-  'فلتر': ['💡 يُنصح بتغيير فلتر الزيت كل 5,000-10,000 كم.', '🔧 الفلتر الأصلي يحمي محرّكك أطول.'],
-  'فرامل': ['🛑 افحص الفحمات والديسكات معًا للسلامة.', '💡 صوت صرير الفرامل = وقت التغيير.'],
-  'بطارية': ['🔋 عمر البطارية عادة 3-5 سنوات.', '💡 افحص أقطاب البطارية من التآكل.'],
-  'إطار': ['🛞 تحقّق من ضغط الإطارات شهريًا.', '💡 دوّر الإطارات كل 10,000 كم.'],
-  'مصباح': ['💡 استبدل المصابيح في أزواج لإضاءة متساوية.'],
-  'صدام': ['🚗 الصدام الأصلي يحافظ على قيمة سيارتك.'],
-  'مكيف': ['❄️ نظّف فلتر المكيف لهواء أنقى.'],
-  'بوجيهات': ['⚡ البواجي الجيدة تحسّن استهلاك الوقود.'],
-  'رديتر': ['🌡️ افحص مستوى سائل التبريد دوريًا.'],
+  'فلتر': [
+    { ar: '💡 يُنصح بتغيير فلتر الزيت كل 5,000-10,000 كم.', en: '💡 Change the oil filter every 5,000–10,000 km.' },
+    { ar: '🔧 الفلتر الأصلي يحمي محرّكك أطول.', en: '🔧 A genuine filter protects your engine longer.' },
+  ],
+  'فرامل': [
+    { ar: '🛑 افحص الفحمات والديسكات معًا للسلامة.', en: '🛑 Check pads and discs together for safety.' },
+    { ar: '💡 صوت صرير الفرامل = وقت التغيير.', en: '💡 Squeaking brakes = time to replace.' },
+  ],
+  'بطارية': [
+    { ar: '🔋 عمر البطارية عادة 3-5 سنوات.', en: '🔋 A battery typically lasts 3–5 years.' },
+    { ar: '💡 افحص أقطاب البطارية من التآكل.', en: '💡 Check the battery terminals for corrosion.' },
+  ],
+  'إطار': [
+    { ar: '🛞 تحقّق من ضغط الإطارات شهريًا.', en: '🛞 Check tire pressure monthly.' },
+    { ar: '💡 دوّر الإطارات كل 10,000 كم.', en: '💡 Rotate tires every 10,000 km.' },
+  ],
+  'مصباح': [{ ar: '💡 استبدل المصابيح في أزواج لإضاءة متساوية.', en: '💡 Replace bulbs in pairs for even lighting.' }],
+  'صدام': [{ ar: '🚗 الصدام الأصلي يحافظ على قيمة سيارتك.', en: '🚗 A genuine bumper preserves your car value.' }],
+  'مكيف': [{ ar: '❄️ نظّف فلتر المكيف لهواء أنقى.', en: '❄️ Clean the AC filter for cleaner air.' }],
+  'بوجيهات': [{ ar: '⚡ البواجي الجيدة تحسّن استهلاك الوقود.', en: '⚡ Good spark plugs improve fuel economy.' }],
+  'رديتر': [{ ar: '🌡️ افحص مستوى سائل التبريد دوريًا.', en: '🌡️ Check coolant level regularly.' }],
 };
 const GENERIC_TIPS = [
-  '🔍 نتواصل مع الموردين المتخصصين في قطعتك...',
-  '💰 نقارن الأسعار تلقائيًا لنوفّر لك الأفضل...',
-  '⭐ نرتّب العروض حسب السعر والتقييم...',
-  '✅ كل موردينا معتمدون لدى كارلي.',
-  '📦 ستصلك العروض فور وصولها — لا تغلق الصفحة.',
+  { ar: '🔍 نتواصل مع الموردين المتخصصين في قطعتك...', en: '🔍 Contacting suppliers specialized in your part...' },
+  { ar: '💰 نقارن الأسعار تلقائيًا لنوفّر لك الأفضل...', en: '💰 Comparing prices automatically to get you the best...' },
+  { ar: '⭐ نرتّب العروض حسب السعر والتقييم...', en: '⭐ Ranking offers by price and rating...' },
+  { ar: '✅ كل موردينا معتمدون لدى كارلي.', en: '✅ All our suppliers are verified by Carly.' },
+  { ar: '📦 ستصلك العروض فور وصولها — لا تغلق الصفحة.', en: '📦 Offers will reach you as they arrive — keep this page open.' },
 ];
 
 function buildTips() {
-  const parts = window.requestedParts || [];
+  const parts = window.requestedParts || []; // أسماء عربية (القيمة المخزّنة)
   const tips = [];
   for (const p of parts) {
     for (const key in PART_TIPS) {
       if (p.includes(key)) { tips.push(...PART_TIPS[key]); break; }
     }
   }
-  return tips.length ? tips.concat(GENERIC_TIPS) : GENERIC_TIPS.slice();
+  const pool = tips.length ? tips.concat(GENERIC_TIPS) : GENERIC_TIPS.slice();
+  // أرجِع النص حسب اللغة الحالية
+  return pool.map(tp => (typeof tp === 'string' ? tp : (tp[LANG] || tp.ar)));
 }
 
 async function checkOffersReady() {
@@ -674,10 +738,12 @@ async function checkOffersReady() {
 function startCountdown() {
   document.getElementById('formStage').classList.add('hidden');
   document.getElementById('countdownStage').classList.remove('hidden');
-  const tips = buildTips();
+  let tips = buildTips();
   let tipIdx = 0;
+  window._tipState = { get tips() { return tips; }, get idx() { return tipIdx; }, rebuild() { tips = buildTips(); } };
   const counter = document.getElementById('counter');
   const tip = document.getElementById('tip');
+  tip.dataset.def = '0'; // لم تعد النصيحة الافتراضية
   tip.textContent = tips[0];
 
   // تدوير النصائح كل 6 ثوانٍ
