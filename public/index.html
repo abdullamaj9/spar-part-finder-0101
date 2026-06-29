@@ -66,7 +66,17 @@
     font-variant-numeric: tabular-nums;
   }
   .countdown small { display: block; font-size: 15px; color: var(--muted); font-weight: 500; }
-  .tip { color: var(--muted); font-size: 14px; margin-top: 16px; }
+  .tip {
+    color: var(--navy);
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 20px;
+    background: #eef4ff;
+    border: 1px solid #d6e4ff;
+    border-radius: 12px;
+    padding: 14px 18px;
+    line-height: 1.6;
+  }
   /* النتائج */
   .item-result { margin-bottom: 18px; }
   .item-result h3 { color: var(--navy); font-size: 16px; margin-bottom: 8px; }
@@ -141,6 +151,7 @@
       </div>
     </div>
     <div class="countdown"><span id="counter">90</span><small>ثانية — نجمع العروض من الموردين</small></div>
+    <p id="orderNo" style="display:none;color:var(--navy);font-weight:600;font-size:14px;margin-top:10px;background:#f0f0f5;border-radius:8px;padding:8px 14px;display:inline-block"></p>
     <p class="tip" id="tip" style="transition:opacity .3s">جارٍ إرسال طلبك لأفضل الموردين المتخصصين...</p>
   </div>
 </div>
@@ -409,6 +420,12 @@ async function submitRequest() {
     currentItemIds = data.itemIds;
     currentRequestId = data.requestId;
     window.suppliersNotified = data.suppliers_notified || 0;
+    // عرض رقم الطلبية للعميل
+    if (data.order_number) {
+      const el = document.getElementById('orderNo');
+      el.textContent = '📋 رقم طلبك: ' + data.order_number;
+      el.style.display = 'inline-block';
+    }
   } catch (e) {
     alert('تعذّر إرسال الطلب، حاول مجددًا'); backToForm();
   }
@@ -476,9 +493,13 @@ function startCountdown() {
     setTimeout(() => { tip.textContent = tips[tipIdx]; tip.style.opacity = 1; }, 300);
   }, 6000);
 
-  // العداد يعتمد على حالة الخادم: يعرض الوقت المتبقي الفعلي،
-  // ويتوقف فورًا لحظة ما يصبح ready=true (ردّ الجميع أو انتهت المهلة).
-  let lastShown = META.countdown || 90;
+  // نحسب المهلة الصحيحة محليًا من عدد القطع (نفس معادلة الخادم)
+  // الأساس + (عدد القطع - 1) × لكل قطعة، بحد أقصى — حتى لا يقفز العداد لاحقًا
+  const partsCount = (window.requestedParts || []).length || 1;
+  const base = META.countdown || 90;
+  const perItem = META.countdownPerItem || 30;
+  const maxCd = META.countdownMax || 240;
+  let lastShown = Math.min(base + (partsCount - 1) * perItem, maxCd);
   counter.textContent = lastShown;
 
   async function poll() {
