@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { db, getSetting, setSetting } = require('./db');
 const suppliersLib = require('./suppliers');
 const requestsLib = require('./requests');
-const { sendText, sendTemplateRequest, sendDealWon, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
+const { sendText, sendTemplateRequest, sendDealWon, sendOffersReady, sendSupplierRequest, buildSupplierMessage } = require('./whatsapp');
 const { BRANDS, ORIGINS, CONDITIONS } = require('./brands');
 const { PART_CATEGORIES, CATEGORY_NAMES } = require('./parts');
 
@@ -173,8 +173,34 @@ app.get('/api/items/:id/offers', (req, res) => {
 
 // حالة السلة: هل النتائج جاهزة؟ كم الوقت المتبقي؟ (يستخدمها العميل للعداد التنازلي)
 // ready=true يعني: ردّ كل الموردين أو انتهت المهلة — العروض جاهزة للاختيار.
-app.get('/api/requests/:id/status', (req, res) => {
-  res.json(requestsLib.requestStatus(parseInt(req.params.id, 10)));
+app.get('/api/requests/:id/status', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const status = requestsLib.requestStatus(id);
+  // عند جاهزية العروض لأول مرة: أرسل للعميل رابط الاختيار (مرة واحدة)
+  if (status.ready) {
+    try {
+      const reqRow = db.prepare('SELECT r.offers_notified, c.whatsapp AS cust FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(id);
+      if (reqRow && !reqRow.offers_notified) {
+        db.prepare('UPDATE requests SET offers_notified = 1 WHERE id = ?').run(id); // علّم قبل الإرسال لمنع التكرار
+        const base = process.env.PUBLIC_URL || `https://${req.get('host')}`;
+        const link = `${base}/?order=CARLY-${id}`;
+        // إشعار العميل (يعمل mock حتى اعتماد القالب — لا يكسر شيئًا)
+        sendOffersReady(reqRow.cust, { orderNumber: 'CARLY-' + id, link })
+          .catch(e => console.error('offers_ready notify:', String(e.message || e).slice(0, 120)));
+      }
+    } catch (e) { /* لا نُفشل الـ status بسبب الإشعار */ }
+  }
+  res.json(status);
+});
+
+// تفاصيل طلب برقم الطلبية (يقبل "CARLY-21" أو "21") — لصفحة النتائج عبر الرابط
+app.get('/api/orders/:orderNumber', (req, res) => {
+  const raw = String(req.params.orderNumber || '');
+  const id = parseInt(raw.replace(/[^0-9]/g, ''), 10); // نستخرج الرقم من CARLY-21
+  if (!id) return res.status(400).json({ found: false, error: 'رقم طلبية غير صالح' });
+  const detail = requestsLib.orderDetail(id);
+  if (!detail.found) return res.status(404).json({ found: false, error: 'الطلب غير موجود' });
+  res.json(detail);
 });
 
 // نقطة فحص مؤقتة: آخر طلب بالنظام + حالة التايمر كاملة (للاختبار)
@@ -214,7 +240,18 @@ app.get('/api/debug/add-test-supplier', (req, res) => {
 // العميل يختار فائزين لقطعة أو أكثر دفعة واحدة (الصفقة)
 // body: { choices: [{ item_id, offer_id }, ...] }
 app.post('/api/requests/choose', async (req, res) => {
-  const r = requestsLib.chooseWinners(req.body.choices || []);
+  // تحقق من صلاحية الطلب قبل السماح بالاختيار
+  const choices = req.body.choices || [];
+  if (choices.length) {
+    const firstItem = db.prepare('SELECT request_id FROM request_items WHERE id = ?').get(choices[0].item_id);
+    if (firstItem) {
+      const v = requestsLib.orderValidity(firstItem.request_id);
+      if (v.found && v.expired) {
+        return res.status(410).json({ error: 'انتهت صلاحية العروض لهذا الطلب. الرجاء إرسال طلب جديد.', expired: true });
+      }
+    }
+  }
+  const r = requestsLib.chooseWinners(choices);
   if (r.error) return res.status(400).json(r);
 
   // إشعار كل مورد فائز عبر قالب deal_won (مع رقم العميل ليتواصل معه)

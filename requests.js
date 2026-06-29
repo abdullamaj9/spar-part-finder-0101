@@ -90,16 +90,35 @@ function checkItemReady(itemId) {
   const dl = item.deadline ? new Date(item.deadline).getTime() : 0;
   const timeUp = dl > 0 && now >= dl;
 
-  if (allReplied || timeUp) {
-    // القطعة جاهزة: العروض صارت متاحة للعميل ليختار. نعلّمها 'ready'.
+  // منطق الأغلبية (quorum): يوقف مبكرًا لو ردّ أغلبية الموردين ومرّ وقت أدنى.
+  // مفيد مع عدد كبير من الموردين حيث نادرًا يردّ الجميع.
+  let quorumReached = false;
+  if (expected > 0 && dl > 0 && !allReplied) {
+    const pct = parseInt(getSetting('quorum_percent'), 10) || 60;
+    const minSec = parseInt(getSetting('quorum_min_seconds'), 10) || 60;
+    const window = computeWindowForItem(item);          // النافذة الكاملة (ثانية)
+    const secondsLeft = Math.max(0, Math.round((dl - now) / 1000));
+    const elapsed = window - secondsLeft;               // كم وقت مرّ
+    const needed = Math.ceil((expected * pct) / 100);   // عدد الردود المطلوب للأغلبية
+    if (replied >= needed && elapsed >= minSec) quorumReached = true;
+  }
+
+  if (allReplied || timeUp || quorumReached) {
+    const reason = allReplied ? 'all_replied' : (quorumReached ? 'quorum' : 'time_up');
     db.prepare("UPDATE request_items SET status = 'ready' WHERE id = ? AND status = 'collecting'").run(itemId);
     logEvent('offer_received', { item_id: itemId,
-      detail: { ready: true, reason: allReplied ? 'all_replied' : 'time_up', replied, expected } });
-    return { ready: true, reason: allReplied ? 'all_replied' : 'time_up', replied, expected, status: 'ready' };
+      detail: { ready: true, reason, replied, expected } });
+    return { ready: true, reason, replied, expected, status: 'ready' };
   }
 
   const secondsLeft = dl > 0 ? Math.max(0, Math.round((dl - now) / 1000)) : null;
   return { ready: false, replied, expected, seconds_left: secondsLeft, deadline: item.deadline, status: item.status };
+}
+
+// تحسب نافذة المهلة الكاملة (بالثواني) لقطعة، بناءً على عدد قطع سلتها
+function computeWindowForItem(item) {
+  const cnt = db.prepare('SELECT COUNT(*) AS n FROM request_items WHERE request_id = ?').get(item.request_id).n;
+  return computeDeadlineSeconds(cnt);
 }
 
 // حالة السلة كاملة: جاهزة لعرض النتائج لو كل قطعها جاهزة
@@ -114,8 +133,9 @@ function requestStatus(requestId) {
   return { ready, seconds_left, items: states };
 }
 
-// كل القطع التي بُثّت لمورد معيّن وما زالت تجمع عروضًا (مرتّبة بترتيب البث)
-// تُستخدم لتوزيع ردود الأسعار المتعددة على القطع الصحيحة.
+// كل القطع التي بُثّت لمورد معيّن (مرتّبة بترتيب البث)، تُستخدم لتوزيع
+// ردود الأسعار المتعددة على القطع الصحيحة. نشمل كل الحالات النشطة وحتى
+// 'chosen' كي لا يضيع سعر مورد ردّ متأخرًا (يُسجَّل للأرشيف والمقارنة).
 function pendingItemsForSupplier(supplierWhatsapp) {
   return db.prepare(`
     SELECT DISTINCT ri.id, ri.part_name, b.id AS broadcast_id
@@ -123,7 +143,7 @@ function pendingItemsForSupplier(supplierWhatsapp) {
     JOIN suppliers s ON s.id = b.supplier_id
     JOIN request_items ri ON ri.id = b.item_id
     WHERE s.whatsapp = ?
-      AND ri.status IN ('collecting','open','ready')
+      AND ri.status IN ('collecting','open','ready','chosen')
     ORDER BY b.id ASC
   `).all(supplierWhatsapp);
 }
@@ -235,9 +255,14 @@ function chooseWinners(choices) {
       txType = 'lead_fee';
     }
 
-    // تعليم كل قطع المورد كـ"محسومة" + فائزها
+    // تعليم كل قطع المورد كـ"محسومة" + فائزها، وجمع أسماء القطع الفائزة
     const markItem = db.prepare('UPDATE request_items SET status = ?, winner_supplier_id = ? WHERE id = ?');
-    for (const itemId of grp.items) markItem.run('chosen', sid, itemId);
+    const wonPartNames = [];
+    for (const itemId of grp.items) {
+      markItem.run('chosen', sid, itemId);
+      const it = db.prepare('SELECT part_name, note FROM request_items WHERE id = ?').get(itemId);
+      if (it) wonPartNames.push(it.note ? `${it.part_name} (${it.note})` : it.part_name);
+    }
 
     // الصفقة = فوز واحد (خصم مجانية واحد) بغض النظر عن عدد القطع
     db.prepare('UPDATE suppliers SET won_count = won_count + 1, balance = balance - ? WHERE id = ?')
@@ -252,7 +277,7 @@ function chooseWinners(choices) {
 
     results.push({
       supplier_id: sid, name: supplier.name, whatsapp: supplier.whatsapp,
-      items_won: grp.items.length, charged, txType, request_id: requestId,
+      items_won: grp.items.length, won_part_names: wonPartNames, charged, txType, request_id: requestId,
       fee_breakdown: { first: fee.leadFee, each_extra: fee.extraFee },
       free_remaining: Math.max(0, freeLeads - (supplier.won_count + 1)),
     });
@@ -285,9 +310,48 @@ function recordOfferFromReply({ supplier_id, item_id, available, price, reply_se
   return { offer_id: offerId, ready };
 }
 
+// ===== صلاحية العروض للعميل =====
+// الطلب يبقى صالحًا للاختيار لمدة (offer_validity_minutes) بعد بدء التايمر.
+// نحسب وقت الانتهاء من أقدم deadline للقطع + مدة الصلاحية.
+function orderValidity(requestId) {
+  const items = db.prepare('SELECT deadline, status FROM request_items WHERE request_id = ?').all(requestId);
+  if (!items.length) return { found: false };
+  const minutes = parseInt(getSetting('offer_validity_minutes'), 10) || 30;
+  // أبكر deadline (كل القطع لها نفس deadline عادةً)
+  const deadlines = items.map(i => i.deadline).filter(Boolean).map(d => new Date(d).getTime());
+  const base = deadlines.length ? Math.min(...deadlines) : Date.now();
+  const expiresAt = base + minutes * 60 * 1000;
+  const now = Date.now();
+  const chosen = items.every(i => i.status === 'chosen' || i.status === 'closed');
+  return {
+    found: true,
+    expired: now > expiresAt && !chosen, // محسوم لا يُعتبر منتهيًا
+    chosen,
+    expires_at: new Date(expiresAt).toISOString(),
+    minutes_left: Math.max(0, Math.round((expiresAt - now) / 60000)),
+  };
+}
+
+// تفاصيل طلب كامل برقمه (للعرض في صفحة النتائج عبر الرابط)
+function orderDetail(requestId) {
+  const req = db.prepare('SELECT * FROM requests WHERE id = ?').get(requestId);
+  if (!req) return { found: false };
+  const items = db.prepare('SELECT id, part_name, note, part_condition, status FROM request_items WHERE request_id = ?').all(requestId);
+  const validity = orderValidity(requestId);
+  const status = requestStatus(requestId);
+  return {
+    found: true,
+    request: req,
+    order_number: 'CARLY-' + requestId,
+    items: items.map(it => ({ ...it, offers: offersForItem(it.id) })),
+    validity,
+    timer_status: status,
+  };
+}
+
 module.exports = {
   createRequest, broadcastTargets, recordOffer, recordOfferFromReply,
   offersForItem, chooseWinners, computeSupplierFee, supplierBaskets,
   computeDeadlineSeconds, startTimers, checkItemReady, requestStatus, offerCountForItem,
-  pendingItemsForSupplier
+  pendingItemsForSupplier, orderValidity, orderDetail
 };

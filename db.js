@@ -138,6 +138,7 @@ function ensureColumn(table, column, definition) {
 ensureColumn('request_items', 'deadline', "TEXT DEFAULT ''");
 ensureColumn('request_items', 'expected_count', 'INTEGER DEFAULT 0');
 ensureColumn('request_items', 'note', "TEXT DEFAULT ''");
+ensureColumn('requests', 'offers_notified', 'INTEGER DEFAULT 0');
 const DEFAULT_SETTINGS = {
   free_leads: '2',              // أول طلبين فائزين مجانًا لكل مورد
   lead_fee: '5',               // رسوم الـ Lead للقطعة الأولى بالدرهم
@@ -152,6 +153,9 @@ const DEFAULT_SETTINGS = {
   countdown_seconds: '90',
   countdown_per_item: '30',     // ثوانٍ إضافية لكل قطعة بعد الأولى
   countdown_max: '240',         // الحد الأقصى لمهلة التسعير بالثواني
+  quorum_percent: '60',         // نسبة الأغلبية لإيقاف العداد مبكرًا (٪ من الموردين)
+  quorum_min_seconds: '60',     // أقل وقت يمر قبل السماح بالإيقاف بالأغلبية (ثانية)
+  offer_validity_minutes: '30', // مدة صلاحية العروض للعميل قبل انتهاء الطلب (دقيقة)
   backup_interval_hours: '24',  // فترة النسخ الاحتياطي التلقائي بالساعات
 };
 

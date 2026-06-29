@@ -160,6 +160,51 @@ async function sendSupplierRequest(toWhatsapp, itemData, fallbackText) {
 }
 
 // إشعار المورد الفائز عبر قالب deal_won (car, part, customerContact)
+// إشعار العميل بأن عروضه جاهزة، مع رابط صفحة الاختيار.
+// جاهز للتفعيل بمجرد اعتماد قالب 'offers_ready' في Meta (متغيران: رقم الطلبية، الرابط).
+// حتى الاعتماد: يعمل في وضع mock (يسجّل فقط) فلا يكسر الإرسال.
+async function sendOffersReady(toWhatsapp, { orderNumber, link }) {
+  if (PROVIDER === 'mock') {
+    console.log(`[WA mock] → ${toWhatsapp}: [template offers_ready] ${orderNumber} | ${link}`);
+    return { ok: true, mock: true };
+  }
+  if (PROVIDER === 'meta') {
+    // ملاحظة: يتطلب اعتماد قالب 'offers_ready'. حتى يُعتمد، نتجاوز الإرسال بهدوء.
+    if (process.env.OFFERS_READY_TEMPLATE !== '1') {
+      console.log(`[offers_ready] القالب غير مُفعّل بعد — تم تخطّي إشعار العميل ${toWhatsapp} (${orderNumber}).`);
+      return { ok: false, skipped: true, reason: 'template_not_enabled' };
+    }
+    const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: toWhatsapp,
+        type: 'template',
+        template: {
+          name: 'offers_ready',
+          language: { code: 'en' },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: link },
+            ],
+          }],
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      const reason = data.error ? `${data.error.code}: ${data.error.message}` : `HTTP ${res.status}`;
+      throw new Error('offers_ready send failed — ' + reason);
+    }
+    return data;
+  }
+  throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
+}
+
 async function sendDealWon(toWhatsapp, { car, part, customerContact }) {
   if (PROVIDER === 'mock') {
     console.log(`[WA mock] → ${toWhatsapp}: [template deal_won] ${car} | ${part} | ${customerContact}`);
@@ -198,4 +243,4 @@ async function sendDealWon(toWhatsapp, { car, part, customerContact }) {
   throw new Error('مزوّد واتساب غير معروف: ' + PROVIDER);
 }
 
-module.exports = { sendText, sendTemplateRequest, sendDealWon, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
+module.exports = { sendText, sendTemplateRequest, sendDealWon, sendOffersReady, sendSupplierRequest, buildSupplierMessage, buildSupplierButtons, buildPriceRequest, buildWinnerNotice, PROVIDER };
