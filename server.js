@@ -55,6 +55,8 @@ app.get('/api/meta', (req, res) => {
     partCategories: PART_CATEGORIES,
     categoryNames: CATEGORY_NAMES,
     countdown: parseInt(getSetting('countdown_seconds'), 10),
+    countdownPerItem: parseInt(getSetting('countdown_per_item'), 10) || 30,
+    countdownMax: parseInt(getSetting('countdown_max'), 10) || 240,
   });
 });
 
@@ -155,6 +157,7 @@ app.post('/api/requests', async (req, res) => {
     const timer = requestsLib.startTimers(requestId, itemIds, sentCounts);
 
     res.json({ requestId, itemIds, suppliers_notified: sent,
+      order_number: 'CARLY-' + requestId,
       deadline: timer.deadline, countdown_seconds: timer.seconds });
   } catch (e) {
     // رسالة عامة للمتصفح، والتفاصيل في سجل الخادم فقط
@@ -221,9 +224,13 @@ app.post('/api/requests/choose', async (req, res) => {
         const reqRow = db.prepare('SELECT r.*, c.whatsapp AS cust_whatsapp FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(w.request_id);
         if (reqRow) {
           const carDesc = `${reqRow.brand} ${reqRow.model || ''} ${reqRow.year || ''}`.trim();
+          const orderNo = 'CARLY-' + w.request_id;        // رقم الطلبية الفريد
+          const partsList = (w.won_part_names || []).join('، ') || `${w.items_won} قطعة`;
+          // وصف ثنائي اللغة: رقم الطلبية + أسماء القطع
+          const partField = `طلبية ${orderNo} | ${partsList}`;
           await sendDealWon(w.whatsapp, {
             car: carDesc,
-            part: `${w.items_won} قطعة`,
+            part: partField,
             customerContact: reqRow.cust_whatsapp,
           });
         }
@@ -232,6 +239,8 @@ app.post('/api/requests/choose', async (req, res) => {
       }
     }
   }
+  // نضيف رقم الطلبية للرد (ليظهر للعميل)
+  r.order_number = r.winners && r.winners.length ? 'CARLY-' + r.winners[0].request_id : null;
   res.json(r);
 });
 

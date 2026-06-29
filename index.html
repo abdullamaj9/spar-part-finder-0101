@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كارلي — اطلب قطع غيار سيارتك</title>
+<style>
+  :root {
+    --navy: #0F2A4A; --navy-2: #1B3D63; --accent: #1D9E75;
+    --bg: #F5F6F8; --card: #FFFFFF; --line: #E2E6EC;
+    --text: #11243B; --muted: #6B7A8D; --danger: #C0392B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Tahoma, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    padding: 16px; max-width: 640px; margin: 0 auto;
+  }
+  header { text-align: center; padding: 20px 0 12px; }
+  header h1 { color: var(--navy); font-size: 26px; font-weight: 700; }
+  header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  input, select, textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+    border-radius: 9px; font-size: 15px; font-family: inherit; background: #FBFCFD;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { margin-bottom: 12px; }
+  .item-block {
+    border: 1px dashed var(--line); border-radius: 11px;
+    padding: 14px; margin-bottom: 10px; position: relative; background: #FAFBFC;
+  }
+  .item-block .remove {
+    position: absolute; top: 10px; left: 10px; background: none; border: none;
+    color: var(--danger); cursor: pointer; font-size: 18px; width: auto; padding: 0;
+  }
+  .btn {
+    background: var(--navy); color: #fff; border: none; border-radius: 10px;
+    padding: 13px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%;
+    font-family: inherit; transition: background .2s;
+  }
+  .btn:hover { background: var(--navy-2); }
+  .btn-ghost { background: #EEF2F6; color: var(--navy); }
+  .btn-ghost:hover { background: #E2E8EF; }
+  .preview { max-width: 80px; max-height: 80px; border-radius: 8px; margin-top: 8px; display: none; }
+  .hidden { display: none; }
+  /* العداد */
+  .countdown-wrap { text-align: center; padding: 30px 0; }
+  /* أنيميشن ثلاثي الأبعاد لقطعة الغيار (ترس دوّار) */
+  .gear3d-scene { perspective: 600px; height: 110px; display:flex; align-items:center; justify-content:center; margin-bottom: 16px; }
+  .gear3d { position: relative; width: 90px; height: 90px; transform-style: preserve-3d; animation: spin3d 3s linear infinite; }
+  .gear-face { position:absolute; width:90px; height:90px; display:flex; align-items:center; justify-content:center; font-size:80px; line-height:1; }
+  .gear-front { transform: translateZ(8px); }
+  .gear-back { transform: translateZ(-8px) rotateY(180deg); }
+  @keyframes spin3d {
+    0%   { transform: rotateY(0deg) rotateX(15deg); }
+    100% { transform: rotateY(360deg) rotateX(15deg); }
+  }
+  .countdown {
+    font-size: 64px; font-weight: 800; color: var(--navy);
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown small { display: block; font-size: 15px; color: var(--muted); font-weight: 500; }
+  .tip {
+    color: var(--navy);
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 20px;
+    background: #eef4ff;
+    border: 1px solid #d6e4ff;
+    border-radius: 12px;
+    padding: 14px 18px;
+    line-height: 1.6;
+  }
+  /* النتائج */
+  .item-result { margin-bottom: 18px; }
+  .item-result h3 { color: var(--navy); font-size: 16px; margin-bottom: 8px; }
+  .offer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px;
+  }
+  .offer.best { border-color: var(--accent); border-width: 2px; background: #F0FAF6; }
+  .offer .price { font-size: 20px; font-weight: 700; color: var(--navy); }
+  .offer .meta { font-size: 12px; color: var(--muted); }
+  .offer button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-weight: 600; cursor: pointer; width: auto; font-family: inherit;
+  }
+  .badge { background: var(--accent); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>كارلي لقطع الغيار</h1>
+  <p>أرسل طلبك، نجمع لك أفضل الأسعار خلال 90 ثانية — مجانًا</p>
+</header>
+
+<!-- مرحلة 1: النموذج -->
+<div id="formStage">
+  <div class="card">
+    <div class="field">
+      <label>رقمك على واتساب</label>
+      <input id="whatsapp" type="tel" placeholder="مثال: 0501234567" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="isWorkshop" style="width:auto;display:inline"> أنا ورشة / تاجر</label>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>الشركة</label>
+        <select id="brand"><option value="">اختر...</option></select>
+      </div>
+      <div class="field">
+        <label>الموديل</label>
+        <select id="model"><option value="">اختر الشركة أولًا</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>سنة الصنع</label>
+        <input id="year" type="number" placeholder="2020" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>رقم الشاصي (اختياري)</label>
+        <input id="vin" type="text" placeholder="VIN">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label style="font-size:15px;color:var(--navy);margin-bottom:12px">القطع المطلوبة</label>
+    <div id="itemsContainer"></div>
+    <button class="btn btn-ghost" onclick="addItem()" style="margin-top:6px">+ إضافة قطعة أخرى</button>
+  </div>
+
+  <button class="btn" onclick="submitRequest()">إرسال الطلب وبدء البحث</button>
+</div>
+
+<!-- مرحلة 2: العداد -->
+<div id="countdownStage" class="hidden">
+  <div class="card countdown-wrap">
+    <div class="gear3d-scene">
+      <div class="gear3d">
+        <div class="gear-face gear-front">⚙️</div>
+        <div class="gear-face gear-back">⚙️</div>
+      </div>
+    </div>
+    <div class="countdown"><span id="counter">90</span><small>ثانية — نجمع العروض من الموردين</small></div>
+    <p id="orderNo" style="display:none;color:var(--navy);font-weight:600;font-size:14px;margin-top:10px;background:#f0f0f5;border-radius:8px;padding:8px 14px;display:inline-block"></p>
+    <p class="tip" id="tip" style="transition:opacity .3s">جارٍ إرسال طلبك لأفضل الموردين المتخصصين...</p>
+  </div>
+</div>
+
+<!-- مرحلة 3: النتائج -->
+<div id="resultsStage" class="hidden">
+  <div class="card">
+    <h2 style="color:var(--navy);font-size:18px;margin-bottom:4px">أفضل العروض</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">اختر الطريقة التي تناسبك</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-ghost" id="modeBasket" onclick="setMode('basket',this)" style="flex:1">مورد واحد للكل</button>
+      <button class="btn btn-ghost" id="modeItem" onclick="setMode('item',this)" style="flex:1">أرخص لكل قطعة</button>
+    </div>
+    <div id="basketView"></div>
+    <div id="itemView" class="hidden"></div>
+    <button class="btn hidden" id="confirmBtn" onclick="confirmChoice()" style="margin-top:14px">تأكيد الاختيار</button>
+  </div>
+</div>
+
+<script>
+let META = { brands: [], brandModels: {}, conditions: [], partCategories: {}, categoryNames: [], countdown: 90 };
+let currentItemIds = [];
+
+async function loadMeta() {
+  const res = await fetch('/api/meta');
+  META = await res.json();
+  const bsel = document.getElementById('brand');
+  META.brands.forEach(b => {
+    const o = document.createElement('option'); o.value = b; o.textContent = b; bsel.appendChild(o);
+  });
+  addItem();
+}
+
+document.getElementById('brand').addEventListener('change', function() {
+  const msel = document.getElementById('model');
+  msel.innerHTML = '<option value="">اختر...</option>';
+  (META.brandModels[this.value] || []).forEach(m => {
+    const o = document.createElement('option'); o.value = m; o.textContent = m; msel.appendChild(o);
+  });
+});
+
+let itemCounter = 0;
+function addItem() {
+  itemCounter++;
+  const id = itemCounter;
+  const div = document.createElement('div');
+  div.className = 'item-block';
+  div.id = 'item-' + id;
+  const condOptions = META.conditions.map(c => `<option value="${c}">${c}</option>`).join('');
+  const catOptions = (META.categoryNames || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  div.innerHTML = `
+    <div class="item-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 class="item-title" style="color:var(--navy);font-size:15px;margin:0">القطعة رقم ${id}</h3>
+      ${id > 1 ? `<button class="remove" onclick="removeItem('item-${id}')" style="position:static">✕ حذف</button>` : ''}
+    </div>
+    <div class="field">
+      <label>القسم</label>
+      <select class="part-category" onchange="fillParts(this)">
+        <option value="">— اختر القسم —</option>${catOptions}
+      </select>
+    </div>
+    <div class="field" style="position:relative">
+      <label>القطعة</label>
+      <input type="text" class="part-search" autocomplete="off" disabled
+             placeholder="اختر القسم أولاً"
+             oninput="onPartSearch(this)" onfocus="onPartSearch(this)"
+             onblur="hideSuggestions(this)">
+      <input type="hidden" class="part-value">
+      <div class="part-suggestions" style="display:none;position:absolute;z-index:20;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1);margin-top:2px"></div>
+      <small class="part-hint" style="display:none;color:#888;margin-top:4px"></small>
+    </div>
+    <div class="field">
+      <label>توضيح (اختياري)</label>
+      <input type="text" class="part-note" placeholder="مثال: أمامي يمين، خلفي يسار...">
+    </div>
+    <div class="field">
+      <label>النوع</label>
+      <select class="part-condition">${condOptions}</select>
+    </div>
+    <div class="field">
+      <label>صورة القطعة (اختياري)</label>
+      <input type="file" class="part-image" accept="image/*" onchange="previewImg(this)">
+      <img class="preview">
+    </div>`;
+  document.getElementById('itemsContainer').appendChild(div);
+  renumberItems();
+}
+
+// حذف قطعة ثم إعادة ترقيم العناوين (القطعة رقم 1، 2، 3...)
+function removeItem(blockId) {
+  const el = document.getElementById(blockId);
+  if (el) el.remove();
+  renumberItems();
+}
+
+// تُعيد ترقيم عناوين القطع حسب ترتيبها الحالي
+function renumberItems() {
+  const blocks = document.querySelectorAll('#itemsContainer .item-block');
+  blocks.forEach((b, i) => {
+    const title = b.querySelector('.item-title');
+    if (title) title.textContent = 'القطعة رقم ' + (i + 1);
+  });
+}
+// عند اختيار القسم: نفعّل خانة بحث القطعة ونخزّن قطع القسم عليها
+function fillParts(sel) {
+  const block = sel.closest('.item-block');
+  const search = block.querySelector('.part-search');
+  const cat = sel.value;
+  const parts = (META.partCategories && META.partCategories[cat]) || [];
+  search._parts = parts;          // نخزّن قطع القسم على العنصر
+  search.disabled = !cat;
+  search.value = '';
+  block.querySelector('.part-value').value = '';
+  search.placeholder = cat ? 'اكتب أو اختر القطعة...' : 'اختر القسم أولاً';
+  hideSuggestions(search);
+  block.querySelector('.part-hint').style.display = 'none';
+}
+
+// بحث/عرض الاقتراحات أثناء الكتابة
+function onPartSearch(input) {
+  const block = input.closest('.item-block');
+  const box = block.querySelector('.part-suggestions');
+  const hint = block.querySelector('.part-hint');
+  const hidden = block.querySelector('.part-value');
+  const parts = input._parts || [];
+  const q = input.value.trim();
+
+  // أي تعديل يدوي يُلغي الاختيار المخزّن حتى يُعاد تأكيده
+  hidden.value = '';
+
+  // فلترة القطع حسب النص (يطابق أي جزء)
+  const matches = q ? parts.filter(p => p.includes(q)) : parts;
+
+  let html = '';
+  if (matches.length) {
+    html = matches.map(p =>
+      `<div class="sug-item" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
+            onmousedown="pickPart(this,'${p.replace(/'/g,"\\'")}')">${p}</div>`
+    ).join('');
+  }
+  // لو فيه نص مكتوب وما يطابق أي قطعة تمامًا → خيار "إضافة ما كتبه"
+  const exact = parts.some(p => p === q);
+  if (q && !exact) {
+    html += `<div class="sug-item sug-add" style="padding:10px 12px;cursor:pointer;background:#eef6ff;font-weight:600;color:var(--navy)"
+                  onmousedown="pickCustom(this,'${q.replace(/'/g,"\\'")}')">➕ إضافة "${q}" كقطعة جديدة</div>`;
+  }
+
+  if (html) { box.innerHTML = html; box.style.display = 'block'; }
+  else { box.style.display = 'none'; }
+  hint.style.display = 'none';
+}
+
+// اختيار قطعة من القائمة
+function pickPart(el, name) {
+  const block = el.closest('.item-block');
+  block.querySelector('.part-search').value = name;
+  block.querySelector('.part-value').value = name;
+  const box = block.querySelector('.part-suggestions');
+  box.style.display = 'none';
+  const hint = block.querySelector('.part-hint');
+  hint.style.display = 'none';
+}
+
+// إضافة قطعة كتبها العميل (غير موجودة في القائمة)
+function pickCustom(el, name) {
+  const block = el.closest('.item-block');
+  block.querySelector('.part-search').value = name;
+  block.querySelector('.part-value').value = name;
+  const box = block.querySelector('.part-suggestions');
+  box.style.display = 'none';
+  const hint = block.querySelector('.part-hint');
+  hint.textContent = '✓ ستُرسل القطعة كما كتبتها';
+  hint.style.color = '#2a8a4a';
+  hint.style.display = 'block';
+}
+
+// إخفاء الاقتراحات (مع تأخير ليُسجَّل النقر) + تلميح لو نسي يؤكّد
+function hideSuggestions(input) {
+  const block = input.closest('.item-block');
+  const box = block.querySelector('.part-suggestions');
+  setTimeout(() => { if (box) box.style.display = 'none'; }, 150);
+  setTimeout(() => {
+    const hidden = block.querySelector('.part-value');
+    const search = block.querySelector('.part-search');
+    const hint = block.querySelector('.part-hint');
+    if (search.value.trim() && !hidden.value) {
+      hint.textContent = '⚠️ اختر قطعة من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبت';
+      hint.style.color = '#c0392b';
+      hint.style.display = 'block';
+    }
+  }, 250);
+}
+
+function previewImg(input) {
+  const img = input.parentElement.querySelector('.preview');
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; img.style.display = 'block'; img.dataset.b64 = e.target.result; };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+async function submitRequest() {
+  const whatsapp = document.getElementById('whatsapp').value.trim();
+  const brand = document.getElementById('brand').value;
+  if (!whatsapp || !brand) { alert('أدخل رقمك واختر الشركة'); return; }
+
+  const items = [];
+  const incompleteParts = []; // أرقام القطع الناقصة (لتنبيه دقيق)
+  document.querySelectorAll('.item-block').forEach((b, idx) => {
+    const partNum = idx + 1;
+    // اسم القطعة المؤكّدة (من اختيار قائمة أو إضافة يدوية)
+    let name = (b.querySelector('.part-value')?.value || '').trim();
+    // احتياط: لو كتب نصًا في خانة البحث ولم يؤكّده، نعتبره اسم القطعة
+    if (!name) {
+      const typed = (b.querySelector('.part-search')?.value || '').trim();
+      if (typed) name = typed;
+    }
+    const cat = b.querySelector('.part-category');
+    const hasCategory = cat && cat.value;
+    // قطعة ناقصة: اختار قسمًا لكن بلا اسم قطعة
+    if (!name) {
+      if (hasCategory) incompleteParts.push(partNum);
+      return;
+    }
+    const note = (b.querySelector('.part-note')?.value || '').trim();
+    const img = b.querySelector('.preview');
+    items.push({
+      part_name: name,
+      part_condition: b.querySelector('.part-condition').value,
+      note: note,
+      image_url: img.dataset.b64 || '',
+    });
+  });
+
+  // تحقق صارم: لو فيه قطعة ناقصة، امنع الإرسال ووجّه العميل بدقة
+  if (incompleteParts.length > 0) {
+    const list = incompleteParts.join('، ');
+    alert(`القطعة رقم ${list} غير مكتملة.\n\n` +
+      `اكتب اسم القطعة واختَرها من القائمة، أو اضغط "➕ إضافة" لإرسالها كما كتبتها.\n` +
+      `ثم أرسل الطلب.`);
+    return; // نمنع الإرسال حتى يكمل
+  }
+  if (!items.length) { alert('اختر قطعة واحدة على الأقل: حدّد القسم ثم القطعة.'); return; }
+
+  const payload = {
+    whatsapp, name: '', is_workshop: document.getElementById('isWorkshop').checked,
+    brand, model: document.getElementById('model').value,
+    year: parseInt(document.getElementById('year').value, 10) || null,
+    vin: document.getElementById('vin').value.trim(), items,
+  };
+
+  // افتح صفحة العداد فورًا (لا ننتظر بثّ السيرفر للموردين) — تجربة أسرع للعميل
+  window.requestedParts = items.map(i => i.part_name);
+  currentRequestId = null;
+  currentItemIds = [];
+  startCountdown();
+
+  // أرسل الطلب في الخلفية؛ نحدّث المعرّفات عند وصول الرد
+  try {
+    const res = await fetch('/api/requests', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); backToForm(); return; }
+    currentItemIds = data.itemIds;
+    currentRequestId = data.requestId;
+    window.suppliersNotified = data.suppliers_notified || 0;
+    // عرض رقم الطلبية للعميل
+    if (data.order_number) {
+      const el = document.getElementById('orderNo');
+      el.textContent = '📋 رقم طلبك: ' + data.order_number;
+      el.style.display = 'inline-block';
+    }
+  } catch (e) {
+    alert('تعذّر إرسال الطلب، حاول مجددًا'); backToForm();
+  }
+}
+
+// إرجاع الواجهة لصفحة النموذج (عند فشل الإرسال)
+function backToForm() {
+  document.getElementById('countdownStage').classList.add('hidden');
+  document.getElementById('formStage').classList.remove('hidden');
+}
+
+// قاعدة نصائح حسب نوع القطعة (مفتاح: كلمة في اسم القطعة)
+const PART_TIPS = {
+  'فلتر': ['💡 يُنصح بتغيير فلتر الزيت كل 5,000-10,000 كم.', '🔧 الفلتر الأصلي يحمي محرّكك أطول.'],
+  'فرامل': ['🛑 افحص الفحمات والديسكات معًا للسلامة.', '💡 صوت صرير الفرامل = وقت التغيير.'],
+  'بطارية': ['🔋 عمر البطارية عادة 3-5 سنوات.', '💡 افحص أقطاب البطارية من التآكل.'],
+  'إطار': ['🛞 تحقّق من ضغط الإطارات شهريًا.', '💡 دوّر الإطارات كل 10,000 كم.'],
+  'مصباح': ['💡 استبدل المصابيح في أزواج لإضاءة متساوية.'],
+  'صدام': ['🚗 الصدام الأصلي يحافظ على قيمة سيارتك.'],
+  'مكيف': ['❄️ نظّف فلتر المكيف لهواء أنقى.'],
+  'بوجيهات': ['⚡ البواجي الجيدة تحسّن استهلاك الوقود.'],
+  'رديتر': ['🌡️ افحص مستوى سائل التبريد دوريًا.'],
+};
+const GENERIC_TIPS = [
+  '🔍 نتواصل مع الموردين المتخصصين في قطعتك...',
+  '💰 نقارن الأسعار تلقائيًا لنوفّر لك الأفضل...',
+  '⭐ نرتّب العروض حسب السعر والتقييم...',
+  '✅ كل موردينا معتمدون لدى كارلي.',
+  '📦 ستصلك العروض فور وصولها — لا تغلق الصفحة.',
+];
+
+function buildTips() {
+  const parts = window.requestedParts || [];
+  const tips = [];
+  for (const p of parts) {
+    for (const key in PART_TIPS) {
+      if (p.includes(key)) { tips.push(...PART_TIPS[key]); break; }
+    }
+  }
+  return tips.length ? tips.concat(GENERIC_TIPS) : GENERIC_TIPS.slice();
+}
+
+async function checkOffersReady() {
+  // تعتمد على نقطة /status الذكية في الخادم (تحسب: ردّ الجميع أو انتهاء المهلة)
+  if (!currentRequestId) return null; // الطلب لم يُسجّل بعد (البثّ في الخلفية)
+  try {
+    const st = await (await fetch('/api/requests/' + currentRequestId + '/status')).json();
+    return st; // { ready, seconds_left, items }
+  } catch { return null; }
+}
+
+function startCountdown() {
+  document.getElementById('formStage').classList.add('hidden');
+  document.getElementById('countdownStage').classList.remove('hidden');
+  const tips = buildTips();
+  let tipIdx = 0;
+  const counter = document.getElementById('counter');
+  const tip = document.getElementById('tip');
+  tip.textContent = tips[0];
+
+  // تدوير النصائح كل 6 ثوانٍ
+  const tipIv = setInterval(() => {
+    tipIdx = (tipIdx + 1) % tips.length;
+    tip.style.opacity = 0;
+    setTimeout(() => { tip.textContent = tips[tipIdx]; tip.style.opacity = 1; }, 300);
+  }, 6000);
+
+  // نحسب المهلة الصحيحة محليًا من عدد القطع (نفس معادلة الخادم)
+  // الأساس + (عدد القطع - 1) × لكل قطعة، بحد أقصى — حتى لا يقفز العداد لاحقًا
+  const partsCount = (window.requestedParts || []).length || 1;
+  const base = META.countdown || 90;
+  const perItem = META.countdownPerItem || 30;
+  const maxCd = META.countdownMax || 240;
+  let lastShown = Math.min(base + (partsCount - 1) * perItem, maxCd);
+  counter.textContent = lastShown;
+
+  async function poll() {
+    const st = await checkOffersReady();
+    if (st) {
+      if (st.ready) { // جاهز — اعرض النتائج فورًا
+        clearInterval(iv); clearInterval(tipIv);
+        counter.textContent = '✓';
+        tip.textContent = '🎉 وصلت العروض! جارٍ العرض...';
+        setTimeout(showResults, 800);
+        return;
+      }
+      // حدّث العداد بالوقت المتبقي الحقيقي من الخادم
+      if (typeof st.seconds_left === 'number') {
+        lastShown = st.seconds_left;
+        counter.textContent = lastShown > 0 ? lastShown : 0;
+      }
+    }
+  }
+
+  // عدّ تنازلي محلي سلس كل ثانية + مزامنة مع الخادم كل 4 ثوانٍ
+  let tick = 0;
+  const iv = setInterval(async () => {
+    tick++;
+    lastShown = Math.max(0, lastShown - 1);
+    counter.textContent = lastShown;
+    if (tick % 4 === 0 || lastShown <= 0) {
+      await poll();
+    }
+    if (lastShown <= 0) {
+      // انتهى الوقت محليًا — تحقق نهائي ثم اعرض
+      const st = await checkOffersReady();
+      clearInterval(iv); clearInterval(tipIv);
+      showResults();
+    }
+  }, 1000);
+
+  // فحص مبكر فوري (لو ردّ الجميع بسرعة)
+  poll();
+}
+
+let currentRequestId = null;
+let basketData = null;
+let itemOffers = {};   // itemId -> offers[]
+let selectedMode = 'basket';
+let basketChoice = null;       // supplier_id المختار في وضع السلة
+let itemChoices = {};          // itemId -> offer_id في وضع التوزيع
+
+async function showResults() {
+  document.getElementById('countdownStage').classList.add('hidden');
+  document.getElementById('resultsStage').classList.remove('hidden');
+
+  // جلب السلال (تغطية كل مورد) + عروض كل قطعة
+  basketData = await (await fetch('/api/requests/' + currentRequestId + '/supplier-baskets')).json();
+  for (const itemId of currentItemIds) {
+    itemOffers[itemId] = await (await fetch('/api/items/' + itemId + '/offers')).json();
+  }
+  setMode('basket', document.getElementById('modeBasket'));
+}
+
+function setMode(mode, btn) {
+  selectedMode = mode;
+  document.getElementById('modeBasket').classList.toggle('btn', mode!=='basket');
+  document.getElementById('modeItem').classList.toggle('btn', mode!=='item');
+  document.getElementById('basketView').classList.toggle('hidden', mode!=='basket');
+  document.getElementById('itemView').classList.toggle('hidden', mode!=='item');
+  document.getElementById('confirmBtn').classList.remove('hidden');
+  if (mode === 'basket') renderBaskets(); else renderItems();
+}
+
+function renderBaskets() {
+  const v = document.getElementById('basketView');
+  if (!basketData.baskets.length) { v.innerHTML = '<p class="muted">لم تصل عروض بعد.</p>'; return; }
+  v.innerHTML = basketData.baskets.map(b => `
+    <div class="offer ${basketChoice===b.supplier_id?'best':''}" onclick="pickBasket(${b.supplier_id})" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="price">${b.sum} درهم</div>
+        ${basketChoice===b.supplier_id?'<span class="badge">مختار</span>':''}
+      </div>
+      <div class="meta">يغطي ${b.covered} من ${b.total_items} قطعة · تقييم ${b.rating||'—'}</div>
+    </div>`).join('');
+}
+
+function pickBasket(sid) { basketChoice = sid; renderBaskets(); }
+
+function renderItems() {
+  const v = document.getElementById('itemView');
+  let html = '';
+  currentItemIds.forEach((itemId, idx) => {
+    const offers = itemOffers[itemId] || [];
+    html += `<div class="item-result"><h3>القطعة ${idx+1}</h3>`;
+    if (!offers.length) html += '<p class="muted" style="font-size:14px">لا عروض</p>';
+    else offers.forEach((o,i) => {
+      html += `<div class="offer ${itemChoices[itemId]===o.id?'best':''}" onclick="pickItem(${itemId},${o.id})" style="cursor:pointer">
+        <div><div class="price">${o.price} درهم ${i===0?'<span class="badge">الأرخص</span>':''}</div>
+        <div class="meta">رد ${o.reply_seconds}ث · تقييم ${o.avg_rating||'—'}</div></div>
+        ${itemChoices[itemId]===o.id?'<span class="badge">مختار</span>':''}</div>`;
+    });
+    html += '</div>';
+  });
+  v.innerHTML = html;
+}
+
+function pickItem(itemId, offerId) { itemChoices[itemId] = offerId; renderItems(); }
+
+async function confirmChoice() {
+  let choices = [];
+  if (selectedMode === 'basket') {
+    if (!basketChoice) { alert('اختر موردًا'); return; }
+    // كل قطع المورد المختار من عروضه
+    for (const itemId of currentItemIds) {
+      const o = (itemOffers[itemId]||[]).find(of => of.supplier_id === basketChoice);
+      if (o) choices.push({ item_id: itemId, offer_id: o.id });
+    }
+  } else {
+    choices = Object.entries(itemChoices).map(([item_id, offer_id]) => ({ item_id: +item_id, offer_id }));
+    if (!choices.length) { alert('اختر عرضًا واحدًا على الأقل'); return; }
+  }
+  const res = await fetch('/api/requests/choose', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ choices }),
+  });
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+  const names = data.winners.map(w => `${w.name} (${w.items_won} قطعة)`).join('، ');
+  document.getElementById('resultsStage').innerHTML =
+    `<div class="card" style="text-align:center"><h2 style="color:var(--accent)">تم تأكيد طلبك ✓</h2>
+     <p style="margin-top:10px">سيتواصل معك: ${names}</p>
+     <p class="muted" style="margin-top:8px">ستصلك بياناتهم عبر الواتساب</p></div>`;
+}
+
+loadMeta();
+</script>
+</body>
+</html>
