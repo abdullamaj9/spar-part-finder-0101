@@ -165,7 +165,7 @@ async function sendSupplierRequest(toWhatsapp, itemData, fallbackText) {
 // حتى الاعتماد: يعمل في وضع mock (يسجّل فقط) فلا يكسر الإرسال.
 async function sendOffersReady(toWhatsapp, { orderNumber, link }) {
   if (PROVIDER === 'mock') {
-    console.log(`[WA mock] → ${toWhatsapp}: [template offers_ready] ${orderNumber} | ${link}`);
+    console.log(`[WA mock] → ${toWhatsapp}: [template offers_ready] زر→ ${orderNumber}`);
     return { ok: true, mock: true };
   }
   if (PROVIDER === 'meta') {
@@ -174,6 +174,9 @@ async function sendOffersReady(toWhatsapp, { orderNumber, link }) {
       console.log(`[offers_ready] القالب غير مُفعّل بعد — تم تخطّي إشعار العميل ${toWhatsapp} (${orderNumber}).`);
       return { ok: false, skipped: true, reason: 'template_not_enabled' };
     }
+    // القالب الجديد: الـ body بلا متغيّرات، والزر (Visit website ديناميكي)
+    // يحمل متغيّرًا واحدًا = الجزء المتغيّر من الرابط (رقم الطلبية، مثل CARLY-22).
+    // قاعدة الرابط محفوظة في القالب: .../?order={{1}}
     const url = `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`;
     const res = await fetch(url, {
       method: 'POST',
@@ -184,12 +187,13 @@ async function sendOffersReady(toWhatsapp, { orderNumber, link }) {
         type: 'template',
         template: {
           name: 'offers_ready',
-          language: { code: 'en' },
+          language: { code: 'ar' },
           components: [{
-            type: 'body',
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
             parameters: [
-              { type: 'text', text: orderNumber },
-              { type: 'text', text: link },
+              { type: 'text', text: orderNumber }, // الجزء المتغيّر من رابط الزر
             ],
           }],
         },
