@@ -180,7 +180,7 @@ app.get('/api/items/:id/offers', (req, res) => {
 app.get('/api/requests/:id/status', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const status = requestsLib.requestStatus(id);
-  // عند جاهزية العروض لأول مرة: أرسل للعميل رابط الاختيار (مرة واحدة)
+  // عند جاهزية العروض لأول مرة: أشعر العميل (مرة واحدة)
   if (status.ready) {
     try {
       const reqRow = db.prepare('SELECT r.offers_notified, c.whatsapp AS cust FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(id);
@@ -188,9 +188,17 @@ app.get('/api/requests/:id/status', async (req, res) => {
         db.prepare('UPDATE requests SET offers_notified = 1 WHERE id = ?').run(id); // علّم قبل الإرسال لمنع التكرار
         const base = process.env.PUBLIC_URL || `https://${req.get('host')}`;
         const link = `${base}/?order=CARLY-${id}`;
-        // إشعار العميل (يعمل mock حتى اعتماد القالب — لا يكسر شيئًا)
-        sendOffersReady(reqRow.cust, { orderNumber: 'CARLY-' + id, link })
-          .catch(e => console.error('offers_ready notify:', String(e.message || e).slice(0, 120)));
+        if (status.has_offers) {
+          // فيه عروض → أرسل قالب الاختيار
+          sendOffersReady(reqRow.cust, { orderNumber: 'CARLY-' + id, link })
+            .catch(e => console.error('offers_ready notify:', String(e.message || e).slice(0, 120)));
+        } else {
+          // لا عروض (محد رد / القطعة نادرة) → أشعر العميل بنص عادي
+          const msg = 'عذرًا، لم نستلم عروضًا على طلبك CARLY-' + id + ' هذه المرة. قد تكون القطعة نادرة. جرّب إرسال طلب جديد أو تواصل معنا.\n\n'
+                    + 'Sorry, we received no offers for your request CARLY-' + id + ' this time. The part may be rare. Try a new request or contact us.';
+          sendText(reqRow.cust, msg)
+            .catch(e => console.error('no_offers notify:', String(e.message || e).slice(0, 120)));
+        }
       }
     } catch (e) { /* لا نُفشل الـ status بسبب الإشعار */ }
   }

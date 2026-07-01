@@ -130,7 +130,13 @@ function requestStatus(requestId) {
   // أقصى وقت متبقٍ بين القطع (للعداد التنازلي في الواجهة)
   const lefts = states.map(s => s.seconds_left).filter(v => typeof v === 'number');
   const seconds_left = lefts.length ? Math.max(...lefts) : 0;
-  return { ready, seconds_left, items: states };
+  // هل وصلت أي عروض فعلًا؟ (لتمييز "جاهز بعروض" من "جاهز بلا رد")
+  const offersRow = db.prepare(`
+    SELECT COUNT(*) AS n FROM offers o
+    JOIN request_items ri ON ri.id = o.item_id
+    WHERE ri.request_id = ?`).get(requestId);
+  const offers_count = offersRow ? offersRow.n : 0;
+  return { ready, seconds_left, items: states, offers_count, has_offers: offers_count > 0 };
 }
 
 // كل القطع التي بُثّت لمورد معيّن (مرتّبة بترتيب البث)، تُستخدم لتوزيع
