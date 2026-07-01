@@ -175,33 +175,37 @@ app.get('/api/items/:id/offers', (req, res) => {
   res.json(requestsLib.offersForItem(parseInt(req.params.id, 10)));
 });
 
+// إشعار العميل بجاهزية العروض (مرة واحدة) — يُستدعى من /status ومن webhook.
+// يرسل قالب الاختيار إن وُجدت عروض، أو نصًّا اعتذاريًا إن لم يرد أحد.
+function notifyOffersReadyOnce(requestId, host) {
+  try {
+    const status = requestsLib.requestStatus(requestId);
+    if (!status.ready) return;
+    const reqRow = db.prepare('SELECT r.offers_notified, c.whatsapp AS cust FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(requestId);
+    if (!reqRow || reqRow.offers_notified) return;
+    db.prepare('UPDATE requests SET offers_notified = 1 WHERE id = ?').run(requestId); // علّم قبل الإرسال لمنع التكرار
+    const base = process.env.PUBLIC_URL || `https://${host}`;
+    const link = `${base}/?order=CARLY-${requestId}`;
+    if (status.has_offers) {
+      sendOffersReady(reqRow.cust, { orderNumber: 'CARLY-' + requestId, link })
+        .then(() => console.log(`[offers_ready] ✅ أُرسل إشعار العروض للعميل ${reqRow.cust} (CARLY-${requestId})`))
+        .catch(e => console.error('[offers_ready] ❌ فشل:', String(e.message || e).slice(0, 150)));
+    } else {
+      const msg = 'عذرًا، لم نستلم عروضًا على طلبك CARLY-' + requestId + ' هذه المرة. قد تكون القطعة نادرة. جرّب إرسال طلب جديد أو تواصل معنا.\n\n'
+                + 'Sorry, we received no offers for your request CARLY-' + requestId + ' this time. The part may be rare. Try a new request or contact us.';
+      sendText(reqRow.cust, msg)
+        .then(() => console.log(`[no_offers] ✅ أُرسل إشعار عدم توفّر عروض للعميل ${reqRow.cust} (CARLY-${requestId})`))
+        .catch(e => console.error('[no_offers] ❌ فشل:', String(e.message || e).slice(0, 150)));
+    }
+  } catch (e) { console.error('notifyOffersReadyOnce:', e.message); }
+}
+
 // حالة السلة: هل النتائج جاهزة؟ كم الوقت المتبقي؟ (يستخدمها العميل للعداد التنازلي)
 // ready=true يعني: ردّ كل الموردين أو انتهت المهلة — العروض جاهزة للاختيار.
 app.get('/api/requests/:id/status', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const status = requestsLib.requestStatus(id);
-  // عند جاهزية العروض لأول مرة: أشعر العميل (مرة واحدة)
-  if (status.ready) {
-    try {
-      const reqRow = db.prepare('SELECT r.offers_notified, c.whatsapp AS cust FROM requests r JOIN customers c ON c.id = r.customer_id WHERE r.id = ?').get(id);
-      if (reqRow && !reqRow.offers_notified) {
-        db.prepare('UPDATE requests SET offers_notified = 1 WHERE id = ?').run(id); // علّم قبل الإرسال لمنع التكرار
-        const base = process.env.PUBLIC_URL || `https://${req.get('host')}`;
-        const link = `${base}/?order=CARLY-${id}`;
-        if (status.has_offers) {
-          // فيه عروض → أرسل قالب الاختيار
-          sendOffersReady(reqRow.cust, { orderNumber: 'CARLY-' + id, link })
-            .catch(e => console.error('offers_ready notify:', String(e.message || e).slice(0, 120)));
-        } else {
-          // لا عروض (محد رد / القطعة نادرة) → أشعر العميل بنص عادي
-          const msg = 'عذرًا، لم نستلم عروضًا على طلبك CARLY-' + id + ' هذه المرة. قد تكون القطعة نادرة. جرّب إرسال طلب جديد أو تواصل معنا.\n\n'
-                    + 'Sorry, we received no offers for your request CARLY-' + id + ' this time. The part may be rare. Try a new request or contact us.';
-          sendText(reqRow.cust, msg)
-            .catch(e => console.error('no_offers notify:', String(e.message || e).slice(0, 120)));
-        }
-      }
-    } catch (e) { /* لا نُفشل الـ status بسبب الإشعار */ }
-  }
+  if (status.ready) notifyOffersReadyOnce(id, req.get('host')); // إشعار عند الجاهزية (احتياط لو العميل فاتح الصفحة)
   res.json(status);
 });
 
@@ -219,6 +223,7 @@ app.get('/api/orders/:orderNumber', (req, res) => {
 app.get('/api/debug/last-request', (req, res) => {
   const last = db.prepare('SELECT * FROM requests ORDER BY id DESC LIMIT 1').get();
   if (!last) return res.json({ message: 'لا يوجد أي طلب بعد' });
+  const cust = db.prepare('SELECT whatsapp, is_workshop FROM customers WHERE id = ?').get(last.customer_id);
   const items = db.prepare('SELECT id, part_name, status, deadline, expected_count FROM request_items WHERE request_id = ?').all(last.id);
   const status = requestsLib.requestStatus(last.id);
   // نضيف العروض الواصلة لكل قطعة (لتشخيص هل سُجّلت الردود)
@@ -226,7 +231,7 @@ app.get('/api/debug/last-request', (req, res) => {
     ...it,
     offers: requestsLib.offersForItem(it.id),
   }));
-  res.json({ request: last, items: withOffers, timer_status: status });
+  res.json({ request: last, customer_whatsapp: cust ? cust.whatsapp : null, items: withOffers, timer_status: status });
 });
 
 // تشخيص: عرض الموردين المسجّلين بأرقامهم المطبّعة (لمطابقة رقم الرد)
@@ -391,7 +396,7 @@ app.post('/api/webhook/reply', (req, res) => {
   try {
     // الصيغة المبسّطة للاختبار: { from, text, item_id }
     if (req.body.from && req.body.item_id) {
-      return handleReply(req.body.from, req.body.text, req.body.item_id, res);
+      return handleReply(req.body.from, req.body.text, req.body.item_id, res, req.get('host'));
     }
 
     // صيغة Meta الحقيقية: بنية متداخلة
@@ -427,7 +432,7 @@ app.post('/api/webhook/reply', (req, res) => {
     }
 
     // للنص: نمرّر دائمًا (حتى لو itemId فاضي، handleReply يوزّع بالرقم/الترتيب)
-    if (from && (itemId || message.type === 'text')) return handleReply(from, text, itemId, res);
+    if (from && (itemId || message.type === 'text')) return handleReply(from, text, itemId, res, req.get('host'));
     return res.sendStatus(200);
   } catch (e) {
     console.error('webhook error:', e.message);
@@ -436,7 +441,7 @@ app.post('/api/webhook/reply', (req, res) => {
 });
 
 // المعالج المشترك: يحلّل الرد ويسجّل العرض
-function handleReply(from, text, item_id, res) {
+function handleReply(from, text, item_id, res, host) {
   const normFrom = normalizePhone(from);
   const supplier = db.prepare('SELECT * FROM suppliers WHERE whatsapp = ?').get(normFrom);
   if (!supplier) {
@@ -512,6 +517,11 @@ function handleReply(from, text, item_id, res) {
   }
   console.log(`[webhook] سُجّل ${recorded.length} عرض من "${supplier.name}": ` +
     recorded.map(r => `قطعة ${r.item_id}=${r.available ? r.price : 'لا'}`).join('، '));
+  // إشعار العميل فورًا لو صار الطلب جاهزًا (لا ننتظر العميل يفتح الصفحة)
+  if (anyReady) {
+    const reqId = db.prepare('SELECT request_id FROM request_items WHERE id = ?').get(recorded[0].item_id)?.request_id;
+    if (reqId) notifyOffersReadyOnce(reqId, host);
+  }
   return res.json({ understood: true, recorded, any_ready: anyReady });
 }
 
