@@ -169,6 +169,7 @@
     <div id="basketView"></div>
     <div id="itemView" class="hidden"></div>
     <button class="btn hidden" id="confirmBtn" onclick="confirmChoice()" data-i18n="confirmChoice" style="margin-top:14px">تأكيد الاختيار</button>
+    <button class="btn btn-ghost" onclick="resetToStart()" data-i18n="backHome" style="margin-top:10px">🏠 العودة للرئيسية</button>
   </div>
 </div>
 
@@ -227,6 +228,7 @@ const I18N = {
   alertChooseOffer:{ ar: 'اختر عرضًا واحدًا على الأقل', en: 'Choose at least one offer' },
   newPartRequest:  { ar: '🔍 طلب قطعة جديدة', en: '🔍 New part request' },
   newRequest:      { ar: '🔍 إرسال طلب جديد', en: '🔍 Send new request' },
+  backHome:        { ar: '🏠 العودة للرئيسية', en: '🏠 Back to home' },
   orderConfirmed:  { ar: 'تم تأكيد طلبك ✓', en: 'Your order is confirmed ✓' },
   willContactYou:  { ar: 'سيتواصل معك', en: 'Will contact you' },
   contactViaWa:    { ar: 'ستصلك بياناتهم عبر الواتساب', en: 'Their details will reach you via WhatsApp' },
@@ -245,6 +247,9 @@ const I18N = {
   currency:        { ar: 'درهم', en: 'AED' },
   ok:              { ar: 'حسناً', en: 'OK' },
   noOffersYet:     { ar: 'لم تصل عروض بعد.', en: 'No offers yet.' },
+  noOffersTitle:   { ar: 'لم نستلم عروضًا هذه المرة', en: 'No offers this time' },
+  noOffersBody:    { ar: 'لم يرد أي مورد على طلبك خلال المهلة.', en: 'No supplier responded to your request within the time window.' },
+  noOffersHint:    { ar: 'قد تكون القطعة نادرة أو غير متوفّرة حاليًا. جرّب إرسال طلب جديد لاحقًا.', en: 'The part may be rare or currently unavailable. Try sending a new request later.' },
   noOffers:        { ar: 'لا عروض', en: 'No offers' },
   partLabel:       { ar: 'القطعة', en: 'Part' },
   secShort:        { ar: 'ث', en: 's' },
@@ -866,8 +871,22 @@ async function showResults() {
 
   // جلب السلال (تغطية كل مورد) + عروض كل قطعة
   basketData = await (await fetch('/api/requests/' + currentRequestId + '/supplier-baskets')).json();
+  let totalOffers = 0;
   for (const itemId of currentItemIds) {
     itemOffers[itemId] = await (await fetch('/api/items/' + itemId + '/offers')).json();
+    totalOffers += (itemOffers[itemId] || []).length;
+  }
+  // لا عروض إطلاقًا (محد رد / القطعة نادرة) → صفحة اعتذار مع زر رجوع
+  if (totalOffers === 0 && (!basketData.baskets || !basketData.baskets.length)) {
+    document.getElementById('resultsStage').innerHTML =
+      `<div class="card" style="text-align:center">
+         <div style="font-size:40px;margin-bottom:8px">😔</div>
+         <h2 style="color:var(--navy);font-size:19px;margin-bottom:8px">${t('noOffersTitle')}</h2>
+         <p class="muted" style="margin-bottom:6px">${t('noOffersBody')}</p>
+         <p class="muted" style="font-size:13px;margin-bottom:18px">${t('noOffersHint')}</p>
+         <button class="btn" onclick="resetToStart()">${t('newRequest')}</button>
+       </div>`;
+    return;
   }
   setMode('basket', document.getElementById('modeBasket'));
 }
